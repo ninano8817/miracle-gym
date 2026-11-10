@@ -223,9 +223,9 @@ function vHome() {
     <div class="row">${dateBar()}<button class="iconbtn" data-act="openSettings" aria-label="설정">${ic('gear')}</button><span id="syncdot" class="syncdot ${S.syncing || ''}"></span></div></header>
   <div class="grid2">
     <div class="card tap" ${editW ? '' : 'data-act="editHealth" data-v="weight"'}>
-      <div class="muted sm">체중${h.weight != null ? (h.src === 'shortcut' ? ' · 자동' : ' · 직접') : ''}</div>
-      ${editW ? `<input class="bignum" id="hIn" type="number" inputmode="decimal" step="0.05" value="${h.weight ?? ''}" placeholder="77.0" data-health="weight">`
-      : `<div class="big">${h.weight != null ? r1(h.weight) : '<span class="muted">–</span>'}<small> kg</small></div>`}
+      <div class="muted sm">체중${h.weight != null ? (h.src === 'shortcut' ? ' · 자동' : ' · 직접') : (lw ? ` · ${md(lw.d)} 기록` : '')}</div>
+      ${editW ? `<input class="bignum" id="hIn" type="number" inputmode="decimal" step="0.05" value="${h.weight ?? ''}" placeholder="${lw ? r1(lw.w) : '77.0'}" data-health="weight">`
+      : `<div class="big">${h.weight != null ? r1(h.weight) : (lw ? `<span class="muted">${r1(lw.w)}</span>` : '<span class="muted">–</span>')}<small> kg</small></div>`}
       <div class="sm acc b">${avg != null ? `7일 평균 ${r1(avg)} · 시작 대비 ${r1(avg - START_WEIGHT) > 0 ? '+' : ''}${r1(avg - START_WEIGHT)}` : (lw ? `최근 ${md(lw.d)} ${r1(lw.w)}kg` : '탭해서 입력')}</div>
     </div>
     <div class="card tap" ${editS ? '' : 'data-act="editHealth" data-v="steps"'}>
