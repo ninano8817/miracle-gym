@@ -452,6 +452,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
+    <div class="muted sm">앱 버전 v6 (11/11 한글 입력 수정)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
