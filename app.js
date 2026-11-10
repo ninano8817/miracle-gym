@@ -481,7 +481,7 @@ document.addEventListener('submit', async ev => {
   if (ev.target.id !== 'authForm') return; ev.preventDefault();
   const fd = new FormData(ev.target), email = fd.get('email'), password = fd.get('password'), mode = ev.submitter?.dataset.mode;
   S.authMsg = '처리 중…'; render();
-  const r = mode === 'up' ? await sb.auth.signUp({ email, password }) : await sb.auth.signInWithPassword({ email, password });
+  const r = mode === 'up' ? await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } }) : await sb.auth.signInWithPassword({ email, password });
   if (r.error) { S.authMsg = r.error.message.includes('Invalid login') ? '이메일 또는 비밀번호가 맞지 않습니다.' : r.error.message; render(); return; }
   if (mode === 'up' && !r.data.session) { S.authMsg = '가입 확인 메일을 확인한 뒤 로그인하세요.'; render(); }
 });
