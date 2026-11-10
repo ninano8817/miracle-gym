@@ -306,12 +306,12 @@ function vSearch() {
     <div class="chips scroll">${['전체', ...PARTS].map(p => `<button class="chip ${S.part === p ? 'on' : ''}" data-act="part" data-v="${p}">${p}</button>`).join('')}</div>
     <label class="between toggle"><span>우리 단지 헬스장 기구만</span><input type="checkbox" data-act="gymOnly" ${gymOnly ? 'checked' : ''}></label>
   </div>
-  ${fallback && recent.length ? `<div class="sec">최근 한 종목</div><div class="chips">${recent.slice(0, 8).map(n => `<button class="chip" data-act="addEx" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
+  <div id="exRes">${fallback && recent.length ? `<div class="sec">최근 한 종목</div><div class="chips">${recent.slice(0, 8).map(n => `<button class="chip" data-act="addEx" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
   <div class="sec">${q ? `검색 결과 ${res.length}` : S.part === '전체' ? '전체 종목' : S.part}</div>
   <div class="list">${res.map(({ e, m }) => { const ls = lastSession(e.name, today()); return `<button class="lrow" data-act="addEx" data-v="${esc(e.name)}">
       ${e.img ? `<img src="img/${e.img}_0.jpg" alt="" loading="lazy">` : `<span class="ph">${ic('gym', 20)}</span>`}
       <span class="col f1"><span>${hlName(e.name, m.hl)}${e.gym ? '' : ' <span class="tag">헬스장에 없음</span>'}</span><span class="muted sm">${e.part} · ${(TYPES[e.type] || {}).label || ''} · ${ls ? `지난번 ${fmtSet(e.type, ls.sets[0])}` : '처음 하는 종목'}</span></span>
-      <span class="acc b sm">추가</span></button>`; }).join('') || `<div class="muted pad">검색 결과가 없습니다.</div>`}</div>
+      <span class="acc b sm">추가</span></button>`; }).join('') || `<div class="muted pad">검색 결과가 없습니다.</div>`}</div></div>
   <div class="card col">
     <b>찾는 종목이 없나요?</b>
     <div class="row g6"><input id="newExName" placeholder="종목 이름" value="${esc(q && !/^[ㄱ-ㅎ]+$/.test(q) ? q : '')}" aria-label="새 종목 이름">
@@ -362,10 +362,10 @@ function vFood() {
     ${items.length ? `<button class="linkbtn" data-act="saveUsual">이 끼니를 '평소대로'로 저장</button>` : ''}
   </div>
   <label class="search">${ic('search', 18, 2.2)}<input id="foodQ" value="${esc(S.fq)}" placeholder="음식 검색 (예: 뼈해장, ㄷㅈㅉㄱ)" autocomplete="off" aria-label="음식 검색"></label>
-  ${S.fq ? `<div class="list card">${res.map(({ f, m }) => `<button class="lrow" data-act="cartAdd" data-v="${esc(f.n)}"><span class="col f1"><span>${hlName(f.n, m.hl)}${f.mine ? ' <span class="tag">내 음식</span>' : ''}</span><span class="muted sm">${esc(f.u || '')} · ${r0(f.k)}kcal · P${r1(f.p)}</span></span><span class="acc b sm">담기</span></button>`).join('') || '<div class="muted pad">결과가 없어요. 아래 "직접 입력"으로 추가하세요.</div>'}</div>` : `
+  <div id="foodRes">${S.fq ? `<div class="list card">${res.map(({ f, m }) => `<button class="lrow" data-act="cartAdd" data-v="${esc(f.n)}"><span class="col f1"><span>${hlName(f.n, m.hl)}${f.mine ? ' <span class="tag">내 음식</span>' : ''}</span><span class="muted sm">${esc(f.u || '')} · ${r0(f.k)}kcal · P${r1(f.p)}</span></span><span class="acc b sm">담기</span></button>`).join('') || '<div class="muted pad">결과가 없어요. 아래 "직접 입력"으로 추가하세요.</div>'}</div>` : `
   <div class="sec">구내식당 한 끼</div>
   <div class="grid2">${PRESETS.map((p, i) => `<button class="tile" data-act="preset" data-v="${i}"><b>${esc(p.n.replace('구내식당: ', ''))}</b><span class="muted sm">약 ${p.k}kcal · P${p.p}</span></button>`).join('')}</div>
-  ${recentFoods().length ? `<div class="sec">최근 먹은 음식</div><div class="chips">${recentFoods().map(m => `<button class="chip" data-act="cartRecent" data-v="${esc(m.n)}">${esc(m.n)}</button>`).join('')}</div>` : ''}`}
+  ${recentFoods().length ? `<div class="sec">최근 먹은 음식</div><div class="chips">${recentFoods().map(m => `<button class="chip" data-act="cartRecent" data-v="${esc(m.n)}">${esc(m.n)}</button>`).join('')}</div>` : ''}`}</div>
   <button class="linkbtn" data-act="toggleManual">${S.manual ? '직접 입력 닫기' : '+ 직접 입력 (영양성분표 보고)'}</button>
   ${S.manual ? `<div class="card col"><input id="mN" placeholder="음식 이름" aria-label="음식 이름"><div class="grid4">${[['mK', 'kcal'], ['mP', '단백질 g'], ['mC', '탄수 g'], ['mF', '지방 g']].map(([id, l]) => `<label class="field"><span>${l}</span><input id="${id}" type="number" inputmode="decimal"></label>`).join('')}</div><button class="btn" data-act="manualAdd">담기 (내 음식에 저장)</button></div>` : ''}
   <div style="height:${S.cart.length ? 170 : 30}px"></div>
@@ -557,10 +557,16 @@ function addExercise(name) {
   setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 50);
 }
 
+// 입력창은 그대로 두고 결과 영역만 바꿈 (한글 조합이 끊기지 않도록)
+function patch(id, view) {
+  const cur = document.getElementById(id); if (!cur) return render();
+  const t = document.createElement('template'); t.innerHTML = view();
+  const nx = t.content.getElementById(id); if (nx) cur.innerHTML = nx.innerHTML;
+}
 document.addEventListener('input', ev => {
   const el = ev.target;
-  if (el.id === 'exQ') { S.q = el.value; const pos = el.selectionStart; render(); const n = document.getElementById('exQ'); n.focus(); n.setSelectionRange(pos, pos); }
-  if (el.id === 'foodQ') { S.fq = el.value; const pos = el.selectionStart; render(); const n = document.getElementById('foodQ'); n.focus(); n.setSelectionRange(pos, pos); }
+  if (el.id === 'exQ') { S.q = el.value; patch('exRes', vSearch); }
+  if (el.id === 'foodQ') { S.fq = el.value; patch('foodRes', vFood); }
 });
 document.addEventListener('change', ev => {
   const el = ev.target;
