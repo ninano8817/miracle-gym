@@ -162,7 +162,7 @@ const ICON = {
 const ic = (n, s = 20, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
 
 function requestRender() { const a = document.activeElement; if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && $app().contains(a)) { S.needsRender = true; return; } render(); }
-document.addEventListener('focusout', () => setTimeout(() => { if (S.needsRender) { const a = document.activeElement; if (!(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) { S.needsRender = false; render(); } } }, 60));
+document.addEventListener('focusout', () => setTimeout(() => { if (S.needsRender) { const a = document.activeElement; if (!(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) { S.needsRender = false; render(); } } }, 400)); // 탭(클릭)이 끝난 뒤에 다시 그리도록 여유
 
 function render() {
   S.needsRender = false;
@@ -292,6 +292,7 @@ function vGym() {
   ${ex.length ? '' : `<div class="card col"><b>직접 고르려면</b><span class="muted sm">이번 주 부족한 부위: ${(() => { const p = weekParts(weekStart(d)); return MAIN_PARTS.slice().sort((a, b) => p[a] - p[b])[0]; })()}</span></div>`}
   ${ex.map((e, i) => exCard(e, i, d)).join('')}
   <button class="dashed" data-act="openSearch">${ic('search', 18, 2.2)} 종목 검색해서 추가</button>
+  ${ex.length ? `<div class="row g6 sm wrap"><span class="muted">루틴에서 빠진 종목 더하기:</span>${SPLITS.map(x => `<button class="chipbtn" data-act="loadSplit" data-v="${x.id}">${x.name}</button>`).join('')}</div>` : ''}
   <div class="card col">
     <b>유산소</b>
     ${(day.cardio || []).map((c, i) => `<div class="between"><span>${esc(c.type)} ${c.min || 0}분${c.km ? ' · ' + c.km + 'km' : ''}</span><button class="iconbtn sm" data-act="cardioDel" data-v="${i}" aria-label="삭제">${ic('trash', 16)}</button></div>`).join('')}
@@ -579,7 +580,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v12 (11/11 3분할 순환)</div>
+    <div class="muted sm">앱 버전 v13 (11/11 종목 추가 수정)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
