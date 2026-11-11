@@ -70,7 +70,7 @@ input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
 .setrow{padding:4px 2px;border-radius:10px}.setrow.done{background:var(--accsoft)}
 .sn{text-align:center;font-weight:700;font-size:13px}.prev{font-size:12.5px;color:var(--sub)}
 .cell{position:relative;display:block}.cell input{text-align:center;font-weight:700;font-size:16px;padding:7px 2px;height:40px}
-.cell small{position:absolute;left:0;right:0;bottom:-1px;text-align:center;font-size:9.5px;color:var(--sub);pointer-events:none}
+.cell small{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-size:9.5px;line-height:12px;color:var(--sub);pointer-events:none}.cell:has(small:not(:empty)) input{padding:0 2px 12px;line-height:20px}
 .cell.na{text-align:center;color:var(--sub)}
 .chk{width:44px;height:40px;border-radius:9px;border:1.5px solid #B4B3AD;color:#9A9993;display:flex;align-items:center;justify-content:center}
 .chk.on{background:var(--acc);border-color:var(--acc);color:#fff}
