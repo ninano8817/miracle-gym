@@ -178,6 +178,13 @@ function render() {
   body += sb + vTimer() + vGuide();
   $app().innerHTML = body; document.body.classList.toggle('hastimer', !!S.timer); document.body.classList.toggle('hassess', !!sb);
   if (S._keepScroll) window.scrollTo(0, scrollY); S._keepScroll = false;
+  lockScroll(!!S.guide);
+}
+// 바텀시트가 열려 있는 동안 바닥 페이지 스크롤 잠금 (iOS는 overflow:hidden만으로는 안 막혀서 body를 고정)
+function lockScroll(on) {
+  const b = document.body, locked = b.classList.contains('locked');
+  if (on && !locked) { S._lockY = window.scrollY; b.style.top = `-${S._lockY}px`; b.classList.add('locked'); }
+  else if (!on && locked) { b.classList.remove('locked'); b.style.top = ''; window.scrollTo(0, S._lockY || 0); }
 }
 function vNav() {
   const t = [['home', '홈', 'home'], ['gym', '운동', 'gym'], ['food', '식단', 'food'], ['report', '리포트', 'chart']];
@@ -597,7 +604,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v15 (11/11 화면 확대 수정)</div>
+    <div class="muted sm">앱 버전 v16 (11/11 바텀시트 스크롤 잠금)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
