@@ -530,20 +530,12 @@ function vFood() {
 /* ---------- 리포트 ---------- */
 function vReport() {
   const st = settings(), ws = S.reportWeek || weekStart(today()), we = addDays(ws, 6);
-  const avg = avgWeight(we), prevAvg = avgWeight(addDays(ws, -1));
-  const chartEnd = we <= today() ? we : today(), pts = [], avgs = [];
-  for (let i = 27; i >= 0; i--) { const dd = addDays(chartEnd, -i), w = weightOn(dd); if (w != null) pts.push([27 - i, w]); const a = avgWeight(dd); if (a != null) avgs.push([27 - i, a]); }
   const dots = [...Array(7)].map((_, i) => { const dd = addDays(ws, i), day = getDay(dd), meals = day.meals || []; if (!meals.length || dd > today()) return { cls: 'none', d: dd }; const pct = sumMeals(day).p / st.targets.p; return { cls: pct >= 1 ? 'g' : pct >= .7 ? 'y' : pct >= .3 ? 'o' : 'r', d: dd }; });
   const hit = dots.filter(x => x.cls === 'g').length, parts = weekParts(ws), maxP = Math.max(1, ...PARTS.map(p => parts[p]));
   const upper = MAIN_PARTS, top = upper.slice().sort((a, b) => parts[b] - parts[a])[0], low = upper.slice().sort((a, b) => parts[a] - parts[b])[0];
   return `<div class="page">
   <header class="hdr"><h1>리포트</h1><div class="row g4"><button class="iconbtn" data-act="wprev" aria-label="이전 주">${ic('left', 16, 2.4)}</button><b class="sm">${md(ws)} – ${md(we)}</b><button class="iconbtn" data-act="wnext" aria-label="다음 주" ${we >= today() ? 'disabled' : ''}>${ic('right', 16, 2.4)}</button></div></header>
-  <div class="card col">
-    <div class="between"><b>체중 · 7일 평균</b>${avg != null && prevAvg != null ? `<span class="sm b ${avg <= prevAvg ? 'acc' : 'warnt'}">전주 대비 ${avg - prevAvg > 0 ? '+' : ''}${r1(avg - prevAvg)}kg</span>` : ''}</div>
-    <div class="huge">${avg != null ? r1(avg) : '–'}<small> kg · 목표 70</small></div>
-    ${chart(pts, avgs)}
-    <span class="muted sm">점 = 아침 체중 · 선 = 7일 평균 (최근 4주)</span>
-  </div>
+  ${vWeightCard()}
   <div class="card col">
     <div class="between"><b>단백질 ${st.targets.p}g 달성</b><span class="muted sm">${hit} / 7일</span></div>
     <div class="grid7">${dots.map(x => `<div class="col cc g4"><span class="pdot ${x.cls}"></span><span class="sm muted">${DOW[parseD(x.d).getDay()]}</span></div>`).join('')}</div>
@@ -555,14 +547,71 @@ function vReport() {
     ${parts[top] > 0 && parts[low] < parts[top] / 2 ? `<div class="note">${low} 세트가 ${top}의 절반 이하입니다. 다음 운동은 ${low} 종목부터 시작해 보세요.</div>` : ''}
   </div></div>`;
 }
-function chart(pts, avgs) {
-  if (pts.length < 1) return '<div class="muted sm pad">체중 기록이 쌓이면 그래프가 그려집니다.</div>';
-  const W = 340, H = 110, ys = pts.map(p => p[1]).concat(avgs.map(a => a[1])); let mn = Math.min(...ys), mx = Math.max(...ys); if (mx - mn < 1) { mn -= .5; mx += .5; }
-  const X = i => 6 + i / 27 * (W - 12), Y = v => 8 + (1 - (v - mn) / (mx - mn)) * (H - 16);
-  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="최근 4주 체중 추이"><line x1="0" x2="${W}" y1="${H - 4}" y2="${H - 4}" stroke="var(--line)"/>
-    <text x="${W}" y="12" text-anchor="end">${r1(mx)}</text><text x="${W}" y="${H - 8}" text-anchor="end">${r1(mn)}</text>
-    ${avgs.length > 1 ? `<polyline fill="none" stroke="var(--acc)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${avgs.map(a => X(a[0]) + ',' + Y(a[1])).join(' ')}"/>` : ''}
-    ${pts.map(p => `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="var(--sub)"/>`).join('')}</svg>`;
+/* ---------- 체중 그래프 (애플 건강 앱 방식: 1일·1주·1개월·6개월·1년) ---------- */
+const W_RANGES = [['d', '1일'], ['w', '1주'], ['m', '1개월'], ['6m', '6개월'], ['y', '1년']];
+const mdw = d => `${md(d)}(${DOW[parseD(d).getDay()]})`;
+const avgOf = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
+function ymdLong(d) { const t = parseD(d); return `${t.getFullYear()}년 ${t.getMonth() + 1}월 ${t.getDate()}일`; }
+function rangeText(a, b) { if (a === b) return ymdLong(a); const A = parseD(a), B = parseD(b); return `${ymdLong(a)}~${A.getFullYear() !== B.getFullYear() ? ymdLong(b) : A.getMonth() !== B.getMonth() ? `${B.getMonth() + 1}월 ${B.getDate()}일` : `${B.getDate()}일`}`; }
+// 범위별 점 목록: {w, label(축), tip(선택 시 표시), tick(축 라벨 표시 여부)}
+function wSeries(r, end) {
+  const out = [];
+  if (r === 'd') { out.push({ w: weightOn(end), label: mdw(end), tip: ymdLong(end), tick: true }); return { pts: out, start: end }; }
+  if (r === 'w' || r === 'm') {
+    const n = r === 'w' ? 7 : 30, start = addDays(end, -(n - 1));
+    for (let i = 0; i < n; i++) { const d = addDays(start, i); out.push({ w: weightOn(d), label: md(d), sub: DOW[parseD(d).getDay()], tip: ymdLong(d), tick: r === 'w' || (n - 1 - i) % 7 === 0 }); }
+    return { pts: out, start };
+  }
+  if (r === '6m') {
+    const start = weekStart(addDays(end, -7 * 25));
+    for (let k = 0; k < 26; k++) { const ws = addDays(start, 7 * k), days = [...Array(7)].map((_, i) => addDays(ws, i)).filter(d => d <= end); const prev = k ? parseD(addDays(ws, -7)).getMonth() : -1, m = parseD(ws).getMonth();
+      out.push({ w: avgOf(days.map(weightOn)), label: `${m + 1}월`, tip: `${md(ws)}~${md(days[days.length - 1])} 주 평균`, tick: m !== prev }); }
+    return { pts: out, start };
+  }
+  const E = parseD(end), first = new Date(E.getFullYear(), E.getMonth() - 11, 1);
+  for (let k = 0; k < 12; k++) { const m0 = new Date(first.getFullYear(), first.getMonth() + k, 1), dim = new Date(m0.getFullYear(), m0.getMonth() + 1, 0).getDate(), vals = [];
+    for (let i = 1; i <= dim; i++) { const d = `${m0.getFullYear()}-${pad(m0.getMonth() + 1)}-${pad(i)}`; if (d > end) break; vals.push(weightOn(d)); }
+    out.push({ w: avgOf(vals), label: `${m0.getMonth() + 1}월`, tip: `${m0.getFullYear()}년 ${m0.getMonth() + 1}월 평균`, tick: true }); }
+  return { pts: out, start: `${first.getFullYear()}-${pad(first.getMonth() + 1)}-01` };
+}
+function vWeightCard() {
+  const r = S.wRange || 'w', end = today(), { pts, start } = wSeries(r, end);
+  const vals = pts.map(p => p.w), avg = avgOf(vals), lw = latestWeight(end);
+  // 직전 같은 길이 기간과 비교
+  let prev = null, cmpLabel = '';
+  if (r === 'd') { const y = latestWeight(addDays(end, -1)); prev = y ? y.w : null; cmpLabel = '직전 기록 대비'; }
+  else { const len = Math.round((parseD(end) - parseD(start)) / 864e5) + 1, pe = addDays(start, -1), ps = addDays(pe, -(len - 1)); const pv = []; for (let d = ps; d <= pe; d = addDays(d, 1)) pv.push(weightOn(d)); prev = avgOf(pv); cmpLabel = `이전 ${W_RANGES.find(x => x[0] === r)[1]} 대비`; }
+  const sel = S.wSel != null && pts[S.wSel] && pts[S.wSel].w != null ? pts[S.wSel] : null;
+  const big = sel ? sel.w : avg, diff = !sel && avg != null && prev != null ? avg - prev : null;
+  const what = r === 'd' ? '오늘' : r === '6m' ? '평균 (점 = 주 평균)' : r === 'y' ? '평균 (점 = 월 평균)' : '평균';
+  return `<div class="card col wcard">
+    <div class="seg sm">${W_RANGES.map(([k, l]) => `<button class="${k === r ? 'on' : ''}" data-act="wRange" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="col g2">
+      <span class="muted sm">${sel ? '선택한 기록' : what}</span>
+      <div class="huge">${big != null ? (r === 'd' || sel ? r2(big) : r1(big)) : '–'}<small> kg</small></div>
+      <span class="muted sm">${sel ? sel.tip : rangeText(start, end)}</span>
+    </div>
+    ${wChart(pts, r)}
+    <div class="wfoot sm">${diff != null ? `<span class="b ${diff <= 0 ? 'acc' : 'warnt'}">${cmpLabel} ${diff > 0 ? '+' : ''}${r1(diff)}kg</span>` : `<span class="muted">${cmpLabel}: 비교할 기록 없음</span>`}${lw ? `<span class="muted">목표 70kg까지 ${r1(Math.max(0, lw.w - 70))}kg</span>` : ''}</div>
+    <span class="muted sm">점을 누르면 그날(그 기간) 값이 위에 표시됩니다.</span>
+  </div>`;
+}
+function niceStep(span) { return [0.5, 1, 2, 5, 10].find(s => span / s <= 4) || 10; }
+function wChart(pts, r) {
+  const ys = pts.map(p => p.w).filter(v => v != null);
+  if (!ys.length) return '<div class="muted sm pad">이 기간에는 체중 기록이 없습니다.</div>';
+  let mn = Math.min(...ys), mx = Math.max(...ys); if (mx - mn < 1) { mn -= .6; mx += .6; }
+  const step = niceStep(mx - mn), lo = Math.floor(mn / step) * step, hi = Math.ceil(mx / step) * step;
+  const W = 340, H = 190, L = 4, R = 36, T = 10, B = r === 'w' || r === 'm' ? 34 : 22, n = pts.length;
+  const X = i => n === 1 ? (L + W - R) / 2 : L + 8 + i / (n - 1) * (W - R - L - 16), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const grid = []; for (let v = lo; v <= hi + 1e-9; v += step) grid.push(v);
+  const line = pts.map((p, i) => p.w != null ? `${X(i).toFixed(1)},${Y(p.w).toFixed(1)}` : null).filter(Boolean);
+  return `<svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="체중 그래프">
+    ${grid.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="gl"/><text x="${W - R + 6}" y="${Y(v) + 4}" class="yl">${step < 1 ? v.toFixed(1) : v}</text>`).join('')}
+    ${pts.map((p, i) => p.tick ? `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${H - B}" class="vl"/><text x="${X(i)}" y="${H - B + 14}" class="xl">${p.label}</text>${p.sub ? `<text x="${X(i)}" y="${H - B + 27}" class="xl">(${p.sub})</text>` : ''}` : '').join('')}
+    ${line.length > 1 ? `<polyline points="${line.join(' ')}" class="wl"/>` : ''}
+    ${pts.map((p, i) => p.w != null ? `<circle cx="${X(i)}" cy="${Y(p.w)}" r="${S.wSel === i ? 6 : 4.5}" class="wp${S.wSel === i ? ' on' : ''}"/><circle cx="${X(i)}" cy="${Y(p.w)}" r="14" fill="transparent" data-act="wPt" data-v="${i}"/>` : '').join('')}
+  </svg>`;
 }
 
 /* ---------- 설정 ---------- */
@@ -604,7 +653,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v17 (11/11 하이뮨 액티브 추가)</div>
+    <div class="muted sm">앱 버전 v18 (11/11 체중 그래프 개편)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -663,6 +712,8 @@ document.addEventListener('click', async ev => {
     case 'cartRecent': { const m = recentFoods().find(x => x.n === v); if (m) addCart(m); break; }
     case 'preset': addCart(PRESETS[+v]); break;
     case 'loadSplit': loadSplit(v); break;
+    case 'wRange': S.wRange = v; S.wSel = null; render(); break;
+    case 'wPt': S.wSel = S.wSel === +v ? null : +v; S._keepScroll = true; render(); break;
     case 'sessPause': sessUpdate((t, now) => { if (t.pa) { t.pt = (t.pt || 0) + (now - t.pa); t.pa = null; } else t.pa = now; }); break;
     case 'sessEnd': S.timer = null; sessUpdate((t, now) => { const ts = (getDay(today()).ex || []).flatMap(e => (e.sets || []).filter(x => x.t).map(x => x.t)), last = ts.length ? Math.max(...ts) : now; let end = t.pa || now; if (end - last > 10 * 60000) end = last + 3 * 60000; /* 종료를 늦게 눌렀으면 마지막 세트 3분 뒤로 */ t.end = end; t.pa = null; }); toast('운동 종료 · 수고하셨습니다'); break;
     case 'sessResume': sessUpdate((t, now) => { if (t.end) { t.pt = (t.pt || 0) + (now - t.end); t.end = null; } }); break;
