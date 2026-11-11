@@ -561,7 +561,7 @@ function chart(pts, avgs) {
 /* ---------- 설정 ---------- */
 function vSettings() {
   const st = settings(), tok = S.token;
-  const body = tok ? `{"p_token":"${tok}","p_date":"[날짜]","p_weight":[체중],"p_weight_date":"[체중 날짜]","p_steps":[걸음],"p_active":[활동]}` : '';
+  const body = tok ? `{"p_token":"${tok}","p_weight":"[체중 평균]","p_steps":"[걸음 합계]","p_active":"[활동 에너지 합계]"}` : '';
   return `<div class="page sheet">
   <header class="hdr"><div class="row g6"><button class="iconbtn" data-act="closeOverlay" aria-label="닫기">${ic('left', 22, 2.2)}</button><h1>설정</h1></div></header>
   <div class="card col">
@@ -579,15 +579,15 @@ function vSettings() {
     <span class="sm muted">단축어 앱에서 아래 순서로 한 번만 만들어 두면, 매일 자동으로 체중·걸음이 들어옵니다.</span>
     ${tok ? `<ol class="sm guide">
       <li>단축어 → <b>+</b> → 이름 <code>Miracle GYM 보내기</code></li>
-      <li><b>건강 샘플 찾기</b>: 체중, 정렬 시작일 최신순, 제한 1 → 다음 <b>건강 샘플에서 세부사항 가져오기</b>: 시작일</li>
+      <li><b>건강 샘플 찾기</b>: 체중, 시작일 오늘임, 정렬 시작일 최신순, 제한 1 → <b>통계 계산</b>: 평균</li>
       <li><b>건강 샘플 찾기</b>: 걸음, 시작일 오늘임 → <b>통계 계산</b>: 합계</li>
       <li><b>건강 샘플 찾기</b>: 활동 에너지, 시작일 오늘임 → <b>통계 계산</b>: 합계</li>
-      <li><b>URL 내용 가져오기</b>: URL에 아래 주소, 방법 <code>POST</code>, 헤더 <code>apikey</code> = 아래 키, 요청 본문 <code>JSON</code>으로 필드 6개 추가 (아래 표 참고). 날짜는 형식 <code>yyyy-MM-dd</code></li>
-      <li>자동화 탭 → <b>특정 시간</b> 매일 22:30 → 이 단축어 실행 → <b>즉시 실행</b> 선택</li></ol>
+      <li><b>URL 내용 가져오기</b>: URL에 아래 주소, 방법 <code>POST</code>, 헤더 <code>apikey</code> = 아래 키, 요청 본문 <code>JSON</code>으로 필드 4개 (모두 텍스트)</li>
+      <li>단축어 맨 위 시간 설정: 매일 22:30, 자동화 켬, 알리기 끔</li></ol>
       <div class="kv"><span>URL</span><code>${esc(SUPABASE_URL)}/rest/v1/rpc/ingest_health</code><button class="chipbtn" data-act="copy" data-v="${esc(SUPABASE_URL)}/rest/v1/rpc/ingest_health">복사</button></div>
       <div class="kv"><span>apikey</span><code>${esc(SUPABASE_KEY.slice(0, 18))}…</code><button class="chipbtn" data-act="copy" data-v="${esc(SUPABASE_KEY)}">복사</button></div>
       <div class="kv"><span>p_token</span><code>${esc(tok.slice(0, 8))}…</code><button class="chipbtn" data-act="copy" data-v="${esc(tok)}">복사</button></div>
-      <div class="sm muted">본문 필드: p_token(텍스트) · p_date(현재 날짜) · p_weight(체중 값) · p_weight_date(체중 시작일) · p_steps(걸음 합계) · p_active(활동 합계)</div>
+      <div class="sm muted">본문 필드: p_token(아래 키 붙여넣기) · p_weight(체중 평균) · p_steps(걸음 합계) · p_active(활동 에너지 합계). 체중을 안 잰 날은 체중만 건너뜁니다.</div>
       <button class="chipbtn" data-act="copy" data-v='${esc(body)}'>본문 예시 복사</button>` : `<button class="btn" data-act="makeToken">연동 키 만들기</button>`}
   </div>
   <div class="card col">
@@ -597,7 +597,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v14 (11/11 운동 일시정지·종료)</div>
+    <div class="muted sm">앱 버전 v15 (11/11 화면 확대 수정)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
