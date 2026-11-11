@@ -353,6 +353,82 @@ function recentFoods() {
   for (let i = 0; i < 30; i++) (getDay(addDays(today(), -i)).meals || []).forEach(m => { if (!seen.has(m.n)) { seen.add(m.n); out.push(m); } });
   return out.slice(0, 12);
 }
+/* ---------- 오늘의 총평 (규칙 기반, AI 아님) ---------- */
+const TG = { c: 250, f: 60 };  // 탄수·지방 목표 (g)
+const FILLERS = [['프로틴 1스쿱', 24, 120], ['닭가슴살 100g', 23, 110], ['그릭요거트 100g', 10, 100], ['삶은 계란 2개', 13, 150], ['두유 1팩', 8, 130]];
+const FRIED = /튀김|까스|가스|커틀릿|치킨|가라아게|탕수|깐풍|강정|부침|전병|파전|김치전|버거|피자|감자튀김|크림|마요|나베/;
+function fillPlan(gap, kcalRoom) {
+  const out = []; let g = gap, room = Math.max(kcalRoom, 150), got = 0;
+  for (const [n, p, k] of FILLERS) { if (g <= 5 || out.length >= 3) break; if (k > room && out.length) continue; out.push(n); g -= p; got += p; room -= k; }
+  return { items: out, got };
+}
+const josa = (w, a, b) => { const c = w.charCodeAt(w.length - 1); return w + ((c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28) ? a : b); };
+function reviewReady(d, day) {
+  const has = sl => (day.meals || []).some(m => m.slot === sl);
+  if (has('dinner') || has('post')) return true;
+  if (d < today()) return (day.meals || []).length > 0;
+  return has('lunch') && new Date().getHours() >= 21;
+}
+function vReview(d) {
+  const day = getDay(d), st = settings(), meals = day.meals || [];
+  const has = sl => meals.some(m => m.slot === sl);
+  if (!reviewReady(d, day)) {
+    if (!meals.length) return '';
+    const left = [['breakfast', '아침'], ['lunch', '점심'], ['dinner', '저녁']].filter(([k]) => !has(k)).map(([, l]) => l);
+    return `<div class="card sm muted">저녁까지 기록하면 여기에 오늘의 총평이 나옵니다${left.length ? ` · 남은 끼니: ${left.join(', ')}` : ''}</div>`;
+  }
+  const t = sumMeals(day), T = st.targets, isToday = d === today();
+  const gapP = r0(T.p - t.p), dK = r0(t.k - T.kcal), room = T.kcal - t.k;
+  const slotP = sl => meals.filter(m => m.slot === sl).reduce((a, m) => a + (+m.p || 0), 0);
+  const worked = (day.ex || []).some(e => setsDone(e).length) || (day.cardio || []).length > 0;
+  const good = [], fix = [];
+  // 단백질
+  const pr = t.p / T.p;
+  if (pr >= 0.9) good.push(`단백질 ${r0(t.p)}g으로 목표의 ${r0(pr * 100)}%를 채웠습니다.`);
+  else {
+    const { items, got } = fillPlan(gapP, room), w = items.join(' + ');
+    const enough = got >= gapP - 8;
+    fix.push(`단백질이 ${gapP}g 부족합니다${worked && !has('post') ? ' (운동 후 단백질 기록 없음)' : ''}. ` + (isToday
+      ? (enough ? `지금 ${josa(w, '을', '를')} 드시면 채워집니다 (+${got}g).` : `열량 여유가 적으니 ${josa(w, '만', '만')} 더하고(+${got}g), 나머지는 내일 아침에 단백질 하나를 더해 채우세요.`)
+      : `이런 날은 ${josa(w, '으로', '로')} 채우면 됩니다 (+${got}g).`));
+  }
+  // 끼니별 단백질 약점
+  const weak = [['breakfast', '아침'], ['lunch', '점심'], ['dinner', '저녁']].filter(([k]) => has(k) && slotP(k) < 20);
+  if (weak.length && pr < 0.9) { const [k, l] = weak[0]; fix.push(`${l} 단백질이 ${r0(slotP(k))}g뿐입니다. ${k === 'breakfast' ? '내일 아침엔 그릭요거트나 계란 2개, 단백질 음료 중 하나를 더하세요.' : `${l}엔 고기·생선·두부 반찬을 손바닥 크기만큼 먼저 드세요.`}`); }
+  if (!has('dinner') && has('post')) fix.push('저녁 기록이 없습니다. 드셨다면 기록해 주세요. 거르면 운동 에너지와 단백질이 모두 부족해집니다.');
+  // 운동 후
+  if (worked && !has('post') && pr >= 0.9 && pr < 0.95) fix.push('운동한 날인데 운동 후 단백질 기록이 없습니다. 운동 직후 프로틴 1스쿱(24g)을 고정하세요.');
+  // 열량
+  if (dK > 250) {
+    const top = [...meals].sort((a, b) => b.k - a.k)[0];
+    fix.push(`열량이 목표보다 ${dK}kcal 많습니다. 가장 큰 항목은 ${top.n}(${r0(top.k)}kcal)입니다. ${isToday ? '오늘 남은 시간엔 단백질 외 간식은 쉬세요.' : '비슷한 날엔 밥을 ⅔로 줄이세요.'}`);
+  } else if (dK < -500) {
+    fix.push(`열량이 목표보다 ${-dK}kcal 적습니다. 너무 적게 먹으면 근손실과 다음 날 과식으로 이어지기 쉽습니다. ${isToday ? '자기 전에 그릭요거트나 바나나 정도는 드세요.' : '저녁을 충분히 드세요.'}`);
+  } else good.push(`열량 ${r0(t.k).toLocaleString()}kcal로 목표 범위 안입니다.`);
+  // 지방·튀김
+  if (t.f > TG.f * 1.3) {
+    const fr = meals.filter(m => FRIED.test(m.n)).map(m => m.n.replace(/ ×[\d.]+$/, ''));
+    fix.push(`지방이 ${r0(t.f)}g으로 목표(${TG.f}g)를 넘었습니다.${fr.length ? ` ${fr.slice(0, 2).join(', ')} 같은 튀김·기름진 메뉴 영향이 큽니다. 다음엔 구이·조림·국 메뉴를 고르세요.` : ''}`);
+  }
+  // 운동한 날 탄수
+  if (worked && t.c < 150) fix.push(`운동한 날인데 탄수화물이 ${r0(t.c)}g으로 적습니다. 저녁에 밥 1공기 정도는 드셔야 다음 운동 기록이 유지됩니다.`);
+  const score = (pr >= 0.9 ? 2 : pr >= 0.7 ? 1 : 0) + (Math.abs(dK) <= 250 ? 1 : 0) + (t.f <= TG.f * 1.3 ? 1 : 0);
+  const [gl, gc] = score >= 4 ? ['좋음', 'g'] : score >= 2 ? ['보통', 'y'] : ['아쉬움', 'r'];
+  const bar = (l, v, tg, u = '') => `<span><small>${l}</small><b>${r0(v).toLocaleString()}</b><small>/ ${tg.toLocaleString()}${u}</small></span>`;
+  return `<div class="card col review">
+    <div class="between"><b>${isToday ? '오늘의 총평' : `${md(d)} 총평`}</b><span class="grade ${gc}">${gl}</span></div>
+    <div class="rstats">${bar('열량', t.k, T.kcal)}${bar('단백질', t.p, T.p, 'g')}${bar('탄수', t.c, TG.c, 'g')}${bar('지방', t.f, TG.f, 'g')}</div>
+    ${good.length ? `<div class="sm">✓ ${good.join(' ')}</div>` : ''}
+    ${fix.length ? `<ol class="sm rfix">${fix.slice(0, 3).map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : '<div class="sm">오늘은 고칠 점이 없습니다. 이대로 유지하세요.</div>'}
+  </div>`;
+}
+function searchFoods(q) {
+  const pool = foodPool(), run = qq => pool.map(f => { const m = match(f.n, f.a || '', qq); if (m && f.cafe) m.score += 50; return { f, m }; }).filter(x => x.m).sort((a, b) => b.m.score - a.m.score);
+  let res = run(q);
+  // 결과가 없으면 뒤에서부터 한 글자씩 줄여 비슷한 음식 찾기 (예: 콩나물국밥 → 콩나물국 → 콩나물)
+  for (let qq = q.trim(); !res.length && qq.length > 2;) { qq = qq.slice(0, -1); res = run(qq).map(x => (x.similar = true, x)); }
+  return res.slice(0, 25);
+}
 // 감량 중 근육 유지 기준 추천 1개: 열량 대비 단백질 비중이 가장 높은 메뉴, 같으면 열량이 낮은 쪽
 function cafeRecIdx(menu) {
   let best = -1;
@@ -370,9 +446,10 @@ function vCafe(d) {
 function vFood() {
   const d = S.sel, day = getDay(d), slot = S.foodSlot, items = (day.meals || []).filter(m => m.slot === slot), st = settings();
   const t = sumMeals(day), cartT = S.cart.reduce((a, c) => (a.k += c.k * c.q, a.p += c.p * c.q, a), { k: 0, p: 0 });
-  const res = S.fq ? foodPool().map(f => { const m = match(f.n, f.a || '', S.fq); if (m && f.cafe) m.score += 50; return { f, m }; }).filter(x => x.m).sort((a, b) => b.m.score - a.m.score).slice(0, 25) : [];
+  const res = S.fq ? searchFoods(S.fq) : [];
   return `<div class="page">
   <header class="hdr"><div><div class="muted sm">${fmtDate(d)}</div><h1>식단</h1></div>${dateBar()}</header>
+  ${vReview(d)}
   <div class="seg">${SLOTS.map(([k, l]) => `<button class="${slot === k ? 'on' : ''}" data-act="slot" data-v="${k}">${l}</button>`).join('')}</div>
   <div class="card col">
     <div class="between"><b>${SLOT_LABEL[slot]}</b><span class="muted sm">하루 ${r0(t.k)}kcal · 단백질 ${r0(t.p)}/${st.targets.p}g</span></div>
@@ -380,7 +457,7 @@ function vFood() {
     ${items.length ? `<button class="linkbtn" data-act="saveUsual">이 끼니를 '평소대로'로 저장</button>` : ''}
   </div>
   <label class="search">${ic('search', 18, 2.2)}<input id="foodQ" value="${esc(S.fq)}" placeholder="음식 검색 (예: 뼈해장, ㄷㅈㅉㄱ)" autocomplete="off" aria-label="음식 검색"></label>
-  <div id="foodRes">${S.fq ? `<div class="list card">${res.map(({ f, m }) => `<button class="lrow" data-act="cartAdd" data-v="${esc(f.n)}"><span class="col f1"><span>${hlName(f.n, m.hl)}${f.mine ? ' <span class="tag">내 음식</span>' : ''}${f.cafe ? ' <span class="tag">오늘 구내식당</span>' : ''}</span><span class="muted sm">${esc(f.u || '')} · ${r0(f.k)}kcal · P${r1(f.p)}</span></span><span class="acc b sm">담기</span></button>`).join('') || '<div class="muted pad">결과가 없어요. 아래 "직접 입력"으로 추가하세요.</div>'}</div>` : `
+  <div id="foodRes">${S.fq ? `<div class="list card">${res.map(({ f, m, similar }) => `<button class="lrow" data-act="cartAdd" data-v="${esc(f.n)}"><span class="col f1"><span>${hlName(f.n, m.hl)}${f.mine ? ' <span class="tag">내 음식</span>' : ''}${f.cafe ? ' <span class="tag">오늘 구내식당</span>' : ''}</span><span class="muted sm">${esc(f.u || '')} · ${r0(f.k)}kcal · P${r1(f.p)}${similar ? ' · 비슷한 음식' : ''}</span></span><span class="acc b sm">담기</span></button>`).join('') || '<div class="muted pad">결과가 없어요. 아래 "직접 입력"으로 추가하세요.</div>'}</div>` : `
   ${slot === 'lunch' ? vCafe(d) : ''}
   <div class="sec">${slot === 'lunch' && cafeMenu(d).length ? '메뉴판에 없는 구내식당 한 끼' : '구내식당 한 끼'}</div>
   <div class="grid2">${PRESETS.map((p, i) => `<button class="tile" data-act="preset" data-v="${i}"><b>${esc(p.n.replace('구내식당: ', ''))}</b><span class="muted sm">약 ${p.k}kcal · P${p.p}</span></button>`).join('')}</div>
@@ -471,7 +548,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v7 (11/11 구내식당 식단표)</div>
+    <div class="muted sm">앱 버전 v10 (11/11 총평·음식 확장)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
