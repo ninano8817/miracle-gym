@@ -7,6 +7,7 @@ import { CAFE, CAFE_NAME } from './menus.js';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 const SLOTS = [['breakfast', '아침'], ['lunch', '점심'], ['dinner', '저녁'], ['post', '운동 후'], ['snack', '간식']];
 const SLOT_LABEL = Object.fromEntries(SLOTS);
+const MAIN_PARTS = ['가슴', '어깨', '등', '팔', '하체'];  // 11-11부터 하체 포함 (코어는 균형 계산에서 제외)
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const START_WEIGHT = 79;
 const DEFAULT_SETTINGS = {
@@ -258,7 +259,7 @@ function vGym() {
   const elapsed = isFinite(firstT) && d === today() ? Math.floor((Date.now() - firstT) / 1000) : null;
   return `<div class="page">
   <header class="hdr"><div><div class="muted sm">${fmtDate(d)} · ${dayN(d)}</div><h1>${elapsed != null ? `운동 중 <span class="tnum" id="elapsed" data-start="${firstT}">${Math.floor(elapsed / 60)}:${pad(elapsed % 60)}</span>` : '운동'}</h1></div>${dateBar()}</header>
-  ${ex.length ? '' : `<div class="card col"><b>오늘 할 종목을 추가하세요</b><span class="muted sm">이번 주 부족한 부위: ${(() => { const p = weekParts(weekStart(d)); return ['가슴', '어깨', '등', '팔'].sort((a, b) => p[a] - p[b])[0]; })()}</span></div>`}
+  ${ex.length ? '' : `<div class="card col"><b>오늘 할 종목을 추가하세요</b><span class="muted sm">이번 주 부족한 부위: ${(() => { const p = weekParts(weekStart(d)); return MAIN_PARTS.slice().sort((a, b) => p[a] - p[b])[0]; })()}</span></div>`}
   ${ex.map((e, i) => exCard(e, i, d)).join('')}
   <button class="dashed" data-act="openSearch">${ic('search', 18, 2.2)} 종목 검색해서 추가</button>
   <div class="card col">
@@ -479,7 +480,7 @@ function vReport() {
   for (let i = 27; i >= 0; i--) { const dd = addDays(chartEnd, -i), w = weightOn(dd); if (w != null) pts.push([27 - i, w]); const a = avgWeight(dd); if (a != null) avgs.push([27 - i, a]); }
   const dots = [...Array(7)].map((_, i) => { const dd = addDays(ws, i), day = getDay(dd), meals = day.meals || []; if (!meals.length || dd > today()) return { cls: 'none', d: dd }; const pct = sumMeals(day).p / st.targets.p; return { cls: pct >= 1 ? 'g' : pct >= .7 ? 'y' : pct >= .3 ? 'o' : 'r', d: dd }; });
   const hit = dots.filter(x => x.cls === 'g').length, parts = weekParts(ws), maxP = Math.max(1, ...PARTS.map(p => parts[p]));
-  const upper = ['가슴', '어깨', '등', '팔'], top = upper.slice().sort((a, b) => parts[b] - parts[a])[0], low = upper.slice().sort((a, b) => parts[a] - parts[b])[0];
+  const upper = MAIN_PARTS, top = upper.slice().sort((a, b) => parts[b] - parts[a])[0], low = upper.slice().sort((a, b) => parts[a] - parts[b])[0];
   return `<div class="page">
   <header class="hdr"><h1>리포트</h1><div class="row g4"><button class="iconbtn" data-act="wprev" aria-label="이전 주">${ic('left', 16, 2.4)}</button><b class="sm">${md(ws)} – ${md(we)}</b><button class="iconbtn" data-act="wnext" aria-label="다음 주" ${we >= today() ? 'disabled' : ''}>${ic('right', 16, 2.4)}</button></div></header>
   <div class="card col">
@@ -495,7 +496,7 @@ function vReport() {
   </div>
   <div class="card col">
     <b>부위별 주간 세트</b>
-    <div class="partgrid sm">${PARTS.map(p => p === '하체' && !parts[p] ? `<span>하체</span><span class="muted">당분간 쉬는 중</span><span></span>` : `<span>${p}</span><div class="mini light"><i class="${p === low && p !== '코어' ? 'warnbg' : ''}" style="width:${Math.max(3, parts[p] / maxP * 100)}%"></i></div><b class="right">${parts[p]}</b>`).join('')}</div>
+    <div class="partgrid sm">${PARTS.map(p => `<span>${p}</span><div class="mini light"><i class="${p === low && p !== '코어' ? 'warnbg' : ''}" style="width:${Math.max(3, parts[p] / maxP * 100)}%"></i></div><b class="right">${parts[p]}</b>`).join('')}</div>
     ${parts[top] > 0 && parts[low] < parts[top] / 2 ? `<div class="note">${low} 세트가 ${top}의 절반 이하입니다. 다음 운동은 ${low} 종목부터 시작해 보세요.</div>` : ''}
   </div></div>`;
 }
@@ -548,7 +549,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v10 (11/11 총평·음식 확장)</div>
+    <div class="muted sm">앱 버전 v11 (11/11 하체 포함)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
