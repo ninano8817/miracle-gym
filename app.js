@@ -661,7 +661,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v19 (11/11 체지방률)</div>
+    <div class="muted sm">앱 버전 v20 (11/12 플랭크 검색 개선)</div>
   </div><div style="height:40px"></div></div>`;
 }
 

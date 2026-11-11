@@ -9,7 +9,7 @@ export const TYPES = {
   machine: { label: '머신', input: '핀', unit: 'kg', hint: '핀을 꽂은 숫자' },
   assist:  { label: '어시스트', input: '보조', unit: 'kg', hint: '보조 무게 · 낮아질수록 진전' },
   body:    { label: '맨몸', input: null, unit: '', hint: '횟수만 기록' },
-  time:    { label: '시간', input: null, unit: '초', hint: '버틴 시간(초)' },
+  time:    { label: '맨몸 · 시간', input: null, unit: '초', hint: '버틴 시간(초)' },
   cable:   { label: '케이블', input: '핀', unit: 'kg', hint: '핀을 꽂은 숫자' },
 };
 
@@ -83,7 +83,7 @@ export const EXERCISES = [
   { name: '벤치 딥스', en: 'bench dips', alias: '벤치딥', part: '팔', type: 'body', gym: true, reps: '10-15', img: 'Bench_Dips',
     g: ['삼두', ['벤치 끝에 손을 짚고 엉덩이를 띄우기', '팔꿈치 90°까지 내려가기', '손바닥으로 밀며 올라오기'], ['어깨가 앞으로 말림', '너무 깊이'], '어시스트 딥스'] },
 
-  { name: '플랭크', en: 'plank', alias: '', part: '코어', type: 'time', gym: true, reps: '30-60', img: 'Plank',
+  { name: '플랭크', en: 'plank', alias: '맨몸 코어 버티기 엎드려버티기', part: '코어', type: 'time', gym: true, reps: '30-60', img: 'Plank',
     g: ['복부 · 코어 전체', ['팔꿈치를 어깨 아래에', '머리~발꿈치 일직선 유지', '허리가 처지면 종료'], ['엉덩이 처짐/솟음', '숨 참기'], '무릎 대고 플랭크'] },
   { name: '행잉 레그레이즈', en: 'hanging leg raise', alias: '레그레이즈', part: '코어', type: 'body', gym: true, reps: '10-15', img: 'Hanging_Leg_Raise',
     g: ['아랫배', ['풀업 바에 매달려 어깨 고정', '배를 말듯 다리 들기 (어려우면 무릎 굽혀)', '2~3초 동안 내리기'], ['몸 흔들기', '골반은 그대로 두고 다리만 듦'], '크런치'] },
