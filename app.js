@@ -1,6 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 import { TYPES, PARTS, EXERCISES, FOODS, PRESETS } from './data.js';
+import { CAFE, CAFE_NAME } from './menus.js';
 
 /* ================= 기본 ================= */
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
@@ -338,8 +339,11 @@ function vGuide() {
 }
 
 /* ---------- 식단 ---------- */
+function cafeMenu(d) { return CAFE[d] || []; }
+function cafeFood(m) { const [rc, rp, rf] = m.r; return { n: `${m.c} ${m.n}`, k: m.k, p: r1(m.k * rp / 400), c: r1(m.k * rc / 400), f: r1(m.k * rf / 900), a: `${m.s.join(' ')} 구내식당 ${CAFE_NAME}`, u: '1인분(식단표)', cafe: true }; }
 function foodPool() {
   const st = settings(), seen = new Set(), out = [];
+  cafeMenu(S.sel).forEach(m => { const f = cafeFood(m); seen.add(f.n); out.push(f); });
   (st.customFoods || []).forEach(f => { if (!seen.has(f.n)) { seen.add(f.n); out.push(Object.assign({ u: '1인분', mine: true }, f)); } });
   FOODS.forEach(f => { if (!seen.has(f.n)) { seen.add(f.n); out.push(f); } });
   return out;
@@ -349,10 +353,17 @@ function recentFoods() {
   for (let i = 0; i < 30; i++) (getDay(addDays(today(), -i)).meals || []).forEach(m => { if (!seen.has(m.n)) { seen.add(m.n); out.push(m); } });
   return out.slice(0, 12);
 }
+function vCafe(d) {
+  const menu = cafeMenu(d), wd = new Date(d + 'T00:00:00').getDay();
+  if (!menu.length) return wd === 0 || wd === 6 ? '' : `<div class="muted sm pad">이 날짜의 ${CAFE_NAME} 식단표가 아직 없어요. 아래 대략값이나 검색으로 기록하세요.</div>`;
+  return `<div class="sec">구내식당 메뉴 · ${CAFE_NAME}</div>
+  <div class="list card">${menu.map((m, i) => { const f = cafeFood(m); return `<button class="lrow" data-act="cafe" data-v="${i}"><span class="col f1"><span><b>${m.c}</b> ${esc(m.n)}</span><span class="muted sm">${esc(m.s.join(' · '))}</span><span class="sm">${f.k}kcal · 단백질 ${r0(f.p)}g · 탄수 ${r0(f.c)}g</span></span><span class="acc b sm">담기</span></button>`; }).join('')}</div>
+  <div class="muted sm">밥이나 반찬을 남겼다면 담은 뒤 −로 양을 줄이세요 (0.5인분 단위). 영양값은 식단표 기준 추정치입니다.</div>`;
+}
 function vFood() {
   const d = S.sel, day = getDay(d), slot = S.foodSlot, items = (day.meals || []).filter(m => m.slot === slot), st = settings();
   const t = sumMeals(day), cartT = S.cart.reduce((a, c) => (a.k += c.k * c.q, a.p += c.p * c.q, a), { k: 0, p: 0 });
-  const res = S.fq ? foodPool().map(f => ({ f, m: match(f.n, f.a || '', S.fq) })).filter(x => x.m).sort((a, b) => b.m.score - a.m.score).slice(0, 25) : [];
+  const res = S.fq ? foodPool().map(f => { const m = match(f.n, f.a || '', S.fq); if (m && f.cafe) m.score += 50; return { f, m }; }).filter(x => x.m).sort((a, b) => b.m.score - a.m.score).slice(0, 25) : [];
   return `<div class="page">
   <header class="hdr"><div><div class="muted sm">${fmtDate(d)}</div><h1>식단</h1></div>${dateBar()}</header>
   <div class="seg">${SLOTS.map(([k, l]) => `<button class="${slot === k ? 'on' : ''}" data-act="slot" data-v="${k}">${l}</button>`).join('')}</div>
@@ -362,8 +373,9 @@ function vFood() {
     ${items.length ? `<button class="linkbtn" data-act="saveUsual">이 끼니를 '평소대로'로 저장</button>` : ''}
   </div>
   <label class="search">${ic('search', 18, 2.2)}<input id="foodQ" value="${esc(S.fq)}" placeholder="음식 검색 (예: 뼈해장, ㄷㅈㅉㄱ)" autocomplete="off" aria-label="음식 검색"></label>
-  <div id="foodRes">${S.fq ? `<div class="list card">${res.map(({ f, m }) => `<button class="lrow" data-act="cartAdd" data-v="${esc(f.n)}"><span class="col f1"><span>${hlName(f.n, m.hl)}${f.mine ? ' <span class="tag">내 음식</span>' : ''}</span><span class="muted sm">${esc(f.u || '')} · ${r0(f.k)}kcal · P${r1(f.p)}</span></span><span class="acc b sm">담기</span></button>`).join('') || '<div class="muted pad">결과가 없어요. 아래 "직접 입력"으로 추가하세요.</div>'}</div>` : `
-  <div class="sec">구내식당 한 끼</div>
+  <div id="foodRes">${S.fq ? `<div class="list card">${res.map(({ f, m }) => `<button class="lrow" data-act="cartAdd" data-v="${esc(f.n)}"><span class="col f1"><span>${hlName(f.n, m.hl)}${f.mine ? ' <span class="tag">내 음식</span>' : ''}${f.cafe ? ' <span class="tag">오늘 구내식당</span>' : ''}</span><span class="muted sm">${esc(f.u || '')} · ${r0(f.k)}kcal · P${r1(f.p)}</span></span><span class="acc b sm">담기</span></button>`).join('') || '<div class="muted pad">결과가 없어요. 아래 "직접 입력"으로 추가하세요.</div>'}</div>` : `
+  ${slot === 'lunch' ? vCafe(d) : ''}
+  <div class="sec">${slot === 'lunch' && cafeMenu(d).length ? '메뉴판에 없는 구내식당 한 끼' : '구내식당 한 끼'}</div>
   <div class="grid2">${PRESETS.map((p, i) => `<button class="tile" data-act="preset" data-v="${i}"><b>${esc(p.n.replace('구내식당: ', ''))}</b><span class="muted sm">약 ${p.k}kcal · P${p.p}</span></button>`).join('')}</div>
   ${recentFoods().length ? `<div class="sec">최근 먹은 음식</div><div class="chips">${recentFoods().map(m => `<button class="chip" data-act="cartRecent" data-v="${esc(m.n)}">${esc(m.n)}</button>`).join('')}</div>` : ''}`}</div>
   <button class="linkbtn" data-act="toggleManual">${S.manual ? '직접 입력 닫기' : '+ 직접 입력 (영양성분표 보고)'}</button>
@@ -452,7 +464,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v6 (11/11 한글 입력 수정)</div>
+    <div class="muted sm">앱 버전 v7 (11/11 구내식당 식단표)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -510,6 +522,7 @@ document.addEventListener('click', async ev => {
     case 'cartAdd': { const f = foodPool().find(x => x.n === v); if (f) addCart(f); break; }
     case 'cartRecent': { const m = recentFoods().find(x => x.n === v); if (m) addCart(m); break; }
     case 'preset': addCart(PRESETS[+v]); break;
+    case 'cafe': { const m = cafeMenu(S.sel)[+v]; if (m) addCart(cafeFood(m)); break; }
     case 'qty': { const [i, dlt] = v.split(':'); const c = S.cart[+i]; c.q = Math.round((c.q + +dlt) * 2) / 2; if (c.q <= 0) S.cart.splice(+i, 1); S._keepScroll = true; render(); break; }
     case 'cartSave': { const slot = S.foodSlot, items = S.cart.map(c => ({ id: uid(), slot, n: c.q !== 1 ? `${c.n} ×${c.q}` : c.n, k: r1(c.k * c.q), p: r1(c.p * c.q), c: r1((c.c || 0) * c.q), f: r1((c.f || 0) * c.q) })); S.cart = []; S.fq = ''; mutateDay(S.sel, d => d.meals.push(...items)); toast(`${SLOT_LABEL[slot]}에 ${items.length}개 기록`); window.scrollTo(0, 0); break; }
     case 'toggleManual': S.manual = !S.manual; S._keepScroll = true; render(); break;
