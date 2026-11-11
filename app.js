@@ -604,7 +604,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v16 (11/11 바텀시트 스크롤 잠금)</div>
+    <div class="muted sm">앱 버전 v17 (11/11 하이뮨 액티브 추가)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
