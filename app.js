@@ -110,6 +110,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 /* ================= 계산 ================= */
 function sumMeals(day) { const t = { k: 0, p: 0, c: 0, f: 0 }; (day.meals || []).forEach(m => { t.k += +m.k || 0; t.p += +m.p || 0; t.c += +m.c || 0; t.f += +m.f || 0; }); return t; }
 function weightOn(d) { return num(getHealth(d).weight); }
+function fatOn(d) { return num(getHealth(d).fat); }
+function latestFat(upto) { for (let i = 0; i < 30; i++) { const d = addDays(upto, -i); const f = fatOn(d); if (f != null) return { f, d }; } return null; }
 function avgWeight(end, days = 7) { const ws = []; for (let i = 0; i < days; i++) { const w = weightOn(addDays(end, -i)); if (w != null) ws.push(w); } return ws.length ? ws.reduce((a, b) => a + b) / ws.length : null; }
 function latestWeight(upto) { for (let i = 0; i < 30; i++) { const d = addDays(upto, -i); const w = weightOn(d); if (w != null) return { w, d }; } return null; }
 function setsDone(e) { return (e.sets || []).filter(s => s.done || (s.done === undefined && num(s.r))); }
@@ -215,7 +217,7 @@ function vHome() {
   const d = S.sel, day = getDay(d), h = getHealth(d), st = settings(), t = sumMeals(day);
   const lw = latestWeight(d), avg = avgWeight(d);
   const pPct = Math.min(100, t.p / st.targets.p * 100), remP = st.targets.p - t.p;
-  const ws = weekStart(d), parts = weekParts(ws), upper = ['가슴', '어깨', '등', '팔'], maxSet = Math.max(1, ...upper.map(p => parts[p]));
+  const ws = weekStart(d), parts = weekParts(ws), upper = MAIN_PARTS, maxSet = Math.max(1, ...upper.map(p => parts[p]));
   const weakest = upper.slice().sort((a, b) => parts[a] - parts[b])[0];
   const yday = getDay(addDays(d, -1));
   const rows = SLOTS.filter(([k]) => k !== 'snack' || (day.meals || []).some(m => m.slot === 'snack')).map(([k, l]) => {
@@ -246,6 +248,11 @@ function vHome() {
       <div class="bar"><i style="width:${Math.min(100, (h.steps || 0) / 80)}%"></i></div>
     </div>
   </div>
+  ${(() => { const editF = S.editHealth === 'fat', lf = latestFat(d), pf = lf && latestFat(addDays(lf.d, -7)); return `<div class="card tap row between" ${editF ? '' : 'data-act="editHealth" data-v="fat"'}>
+    <span class="muted sm">체지방률${h.fat != null ? (h.src === 'shortcut' ? ' · 자동' : ' · 직접') : (lf ? ` · ${md(lf.d)} 기록` : '')}</span>
+    ${editF ? `<input class="bignum" id="hIn" type="number" inputmode="decimal" step="0.1" value="${h.fat ?? ''}" placeholder="${lf ? r1(lf.f) : '24.4'}" data-health="fat" style="max-width:120px">`
+    : `<span class="row g6"><b class="lg">${lf ? `<span class="${h.fat != null ? '' : 'muted'}">${r1(lf.f)}</span>` : '<span class="muted">–</span>'}<small class="muted"> %</small></b>${lf && pf && pf.d !== lf.d ? `<span class="sm b ${lf.f <= pf.f ? 'acc' : 'warnt'}">${lf.f - pf.f > 0 ? '+' : ''}${r1(lf.f - pf.f)}%p</span>` : ''}<span class="muted sm">표준 17~22</span></span>`}
+  </div>`; })()}
   <div class="card col">
     <div class="between"><b>단백질</b><span class="muted sm">열량 ${r0(t.k).toLocaleString()} / ${st.targets.kcal.toLocaleString()}</span></div>
     <div class="huge">${r0(t.p)}<small> / ${st.targets.p}g</small></div>
@@ -254,8 +261,8 @@ function vHome() {
   </div>
   <div class="card list">${rows}</div>
   <div class="card dark col">
-    <div class="between"><b>이번 주 상체 세트</b><span class="sm soft">부족: ${weakest}</span></div>
-    <div class="grid4 sm">${upper.map(p => `<div class="col g4"><span>${p} ${parts[p]}</span><div class="mini"><i class="${p === weakest ? 'warnbg' : ''}" style="width:${Math.max(4, parts[p] / maxSet * 100)}%"></i></div></div>`).join('')}</div>
+    <div class="between"><b>이번 주 부위별 세트</b><span class="sm soft">부족: ${weakest}</span></div>
+    <div class="grid5 sm">${upper.map(p => `<div class="col g4"><span>${p} ${parts[p]}</span><div class="mini"><i class="${p === weakest ? 'warnbg' : ''}" style="width:${Math.max(4, parts[p] / maxSet * 100)}%"></i></div></div>`).join('')}</div>
     <button class="btn go" data-act="tab" data-v="gym">운동 시작</button>
   </div>
   </div>`;
@@ -554,52 +561,53 @@ const avgOf = a => { const v = a.filter(x => x != null); return v.length ? v.red
 function ymdLong(d) { const t = parseD(d); return `${t.getFullYear()}년 ${t.getMonth() + 1}월 ${t.getDate()}일`; }
 function rangeText(a, b) { if (a === b) return ymdLong(a); const A = parseD(a), B = parseD(b); return `${ymdLong(a)}~${A.getFullYear() !== B.getFullYear() ? ymdLong(b) : A.getMonth() !== B.getMonth() ? `${B.getMonth() + 1}월 ${B.getDate()}일` : `${B.getDate()}일`}`; }
 // 범위별 점 목록: {w, label(축), tip(선택 시 표시), tick(축 라벨 표시 여부)}
-function wSeries(r, end) {
+function wSeries(r, end, val = weightOn) {
   const out = [];
-  if (r === 'd') { out.push({ w: weightOn(end), label: mdw(end), tip: ymdLong(end), tick: true }); return { pts: out, start: end }; }
+  if (r === 'd') { out.push({ w: val(end), label: mdw(end), tip: ymdLong(end), tick: true }); return { pts: out, start: end }; }
   if (r === 'w' || r === 'm') {
     const n = r === 'w' ? 7 : 30, start = addDays(end, -(n - 1));
-    for (let i = 0; i < n; i++) { const d = addDays(start, i); out.push({ w: weightOn(d), label: md(d), sub: DOW[parseD(d).getDay()], tip: ymdLong(d), tick: r === 'w' || (n - 1 - i) % 7 === 0 }); }
+    for (let i = 0; i < n; i++) { const d = addDays(start, i); out.push({ w: val(d), label: md(d), sub: DOW[parseD(d).getDay()], tip: ymdLong(d), tick: r === 'w' || (n - 1 - i) % 7 === 0 }); }
     return { pts: out, start };
   }
   if (r === '6m') {
     const start = weekStart(addDays(end, -7 * 25));
     for (let k = 0; k < 26; k++) { const ws = addDays(start, 7 * k), days = [...Array(7)].map((_, i) => addDays(ws, i)).filter(d => d <= end); const prev = k ? parseD(addDays(ws, -7)).getMonth() : -1, m = parseD(ws).getMonth();
-      out.push({ w: avgOf(days.map(weightOn)), label: `${m + 1}월`, tip: `${md(ws)}~${md(days[days.length - 1])} 주 평균`, tick: m !== prev }); }
+      out.push({ w: avgOf(days.map(val)), label: `${m + 1}월`, tip: `${md(ws)}~${md(days[days.length - 1])} 주 평균`, tick: m !== prev }); }
     return { pts: out, start };
   }
   const E = parseD(end), first = new Date(E.getFullYear(), E.getMonth() - 11, 1);
   for (let k = 0; k < 12; k++) { const m0 = new Date(first.getFullYear(), first.getMonth() + k, 1), dim = new Date(m0.getFullYear(), m0.getMonth() + 1, 0).getDate(), vals = [];
-    for (let i = 1; i <= dim; i++) { const d = `${m0.getFullYear()}-${pad(m0.getMonth() + 1)}-${pad(i)}`; if (d > end) break; vals.push(weightOn(d)); }
+    for (let i = 1; i <= dim; i++) { const d = `${m0.getFullYear()}-${pad(m0.getMonth() + 1)}-${pad(i)}`; if (d > end) break; vals.push(val(d)); }
     out.push({ w: avgOf(vals), label: `${m0.getMonth() + 1}월`, tip: `${m0.getFullYear()}년 ${m0.getMonth() + 1}월 평균`, tick: true }); }
   return { pts: out, start: `${first.getFullYear()}-${pad(first.getMonth() + 1)}-01` };
 }
 function vWeightCard() {
-  const r = S.wRange || 'w', end = today(), { pts, start } = wSeries(r, end);
-  const vals = pts.map(p => p.w), avg = avgOf(vals), lw = latestWeight(end);
+  const r = S.wRange || 'w', end = today(), F = S.wMetric === 'fat', val = F ? fatOn : weightOn, U = F ? '%' : 'kg', { pts, start } = wSeries(r, end, val);
+  const vals = pts.map(p => p.w), avg = avgOf(vals), lw = latestWeight(end), lf = latestFat(end);
   // 직전 같은 길이 기간과 비교
   let prev = null, cmpLabel = '';
-  if (r === 'd') { const y = latestWeight(addDays(end, -1)); prev = y ? y.w : null; cmpLabel = '직전 기록 대비'; }
-  else { const len = Math.round((parseD(end) - parseD(start)) / 864e5) + 1, pe = addDays(start, -1), ps = addDays(pe, -(len - 1)); const pv = []; for (let d = ps; d <= pe; d = addDays(d, 1)) pv.push(weightOn(d)); prev = avgOf(pv); cmpLabel = `이전 ${W_RANGES.find(x => x[0] === r)[1]} 대비`; }
+  if (r === 'd') { const y = F ? latestFat(addDays(end, -1)) : latestWeight(addDays(end, -1)); prev = y ? (F ? y.f : y.w) : null; cmpLabel = '직전 기록 대비'; }
+  else { const len = Math.round((parseD(end) - parseD(start)) / 864e5) + 1, pe = addDays(start, -1), ps = addDays(pe, -(len - 1)); const pv = []; for (let d = ps; d <= pe; d = addDays(d, 1)) pv.push(val(d)); prev = avgOf(pv); cmpLabel = `이전 ${W_RANGES.find(x => x[0] === r)[1]} 대비`; }
   const sel = S.wSel != null && pts[S.wSel] && pts[S.wSel].w != null ? pts[S.wSel] : null;
   const big = sel ? sel.w : avg, diff = !sel && avg != null && prev != null ? avg - prev : null;
   const what = r === 'd' ? '오늘' : r === '6m' ? '평균 (점 = 주 평균)' : r === 'y' ? '평균 (점 = 월 평균)' : '평균';
   return `<div class="card col wcard">
+    <div class="row g6"><button class="chipbtn ${F ? '' : 'on'}" data-act="wMetric" data-v="w">체중</button><button class="chipbtn ${F ? 'on' : ''}" data-act="wMetric" data-v="fat">체지방률</button></div>
     <div class="seg sm">${W_RANGES.map(([k, l]) => `<button class="${k === r ? 'on' : ''}" data-act="wRange" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="col g2">
       <span class="muted sm">${sel ? '선택한 기록' : what}</span>
-      <div class="huge">${big != null ? (r === 'd' || sel ? r2(big) : r1(big)) : '–'}<small> kg</small></div>
+      <div class="huge">${big != null ? (r === 'd' || sel ? r2(big) : r1(big)) : '–'}<small> ${U}</small></div>
       <span class="muted sm">${sel ? sel.tip : rangeText(start, end)}</span>
     </div>
     ${wChart(pts, r)}
-    <div class="wfoot sm">${diff != null ? `<span class="b ${diff <= 0 ? 'acc' : 'warnt'}">${cmpLabel} ${diff > 0 ? '+' : ''}${r1(diff)}kg</span>` : `<span class="muted">${cmpLabel}: 비교할 기록 없음</span>`}${lw ? `<span class="muted">목표 70kg까지 ${r1(Math.max(0, lw.w - 70))}kg</span>` : ''}</div>
+    <div class="wfoot sm">${diff != null ? `<span class="b ${diff <= 0 ? 'acc' : 'warnt'}">${cmpLabel} ${diff > 0 ? '+' : ''}${r1(diff)}${F ? '%p' : 'kg'}</span>` : `<span class="muted">${cmpLabel}: 비교할 기록 없음</span>`}${F ? (lf ? `<span class="muted">표준 22%까지 ${r1(Math.max(0, lf.f - 22))}%p</span>` : '') : (lw ? `<span class="muted">목표 70kg까지 ${r1(Math.max(0, lw.w - 70))}kg</span>` : '')}</div>
     <span class="muted sm">점을 누르면 그날(그 기간) 값이 위에 표시됩니다.</span>
   </div>`;
 }
 function niceStep(span) { return [0.5, 1, 2, 5, 10].find(s => span / s <= 4) || 10; }
 function wChart(pts, r) {
   const ys = pts.map(p => p.w).filter(v => v != null);
-  if (!ys.length) return '<div class="muted sm pad">이 기간에는 체중 기록이 없습니다.</div>';
+  if (!ys.length) return '<div class="muted sm pad">이 기간에는 기록이 없습니다.</div>';
   let mn = Math.min(...ys), mx = Math.max(...ys); if (mx - mn < 1) { mn -= .6; mx += .6; }
   const step = niceStep(mx - mn), lo = Math.floor(mn / step) * step, hi = Math.ceil(mx / step) * step;
   const W = 340, H = 190, L = 4, R = 36, T = 10, B = r === 'w' || r === 'm' ? 34 : 22, n = pts.length;
@@ -653,7 +661,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v18 (11/11 체중 그래프 개편)</div>
+    <div class="muted sm">앱 버전 v19 (11/11 체지방률)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -713,6 +721,7 @@ document.addEventListener('click', async ev => {
     case 'preset': addCart(PRESETS[+v]); break;
     case 'loadSplit': loadSplit(v); break;
     case 'wRange': S.wRange = v; S.wSel = null; render(); break;
+    case 'wMetric': S.wMetric = v; S.wSel = null; render(); break;
     case 'wPt': S.wSel = S.wSel === +v ? null : +v; S._keepScroll = true; render(); break;
     case 'sessPause': sessUpdate((t, now) => { if (t.pa) { t.pt = (t.pt || 0) + (now - t.pa); t.pa = null; } else t.pa = now; }); break;
     case 'sessEnd': S.timer = null; sessUpdate((t, now) => { const ts = (getDay(today()).ex || []).flatMap(e => (e.sets || []).filter(x => x.t).map(x => x.t)), last = ts.length ? Math.max(...ts) : now; let end = t.pa || now; if (end - last > 10 * 60000) end = last + 3 * 60000; /* 종료를 늦게 눌렀으면 마지막 세트 3분 뒤로 */ t.end = end; t.pa = null; }); toast('운동 종료 · 수고하셨습니다'); break;
