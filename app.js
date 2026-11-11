@@ -353,11 +353,18 @@ function recentFoods() {
   for (let i = 0; i < 30; i++) (getDay(addDays(today(), -i)).meals || []).forEach(m => { if (!seen.has(m.n)) { seen.add(m.n); out.push(m); } });
   return out.slice(0, 12);
 }
+// 감량 중 근육 유지 기준 추천 1개: 열량 대비 단백질 비중이 가장 높은 메뉴, 같으면 열량이 낮은 쪽
+function cafeRecIdx(menu) {
+  let best = -1;
+  menu.forEach((m, i) => { if (best < 0 || m.r[1] > menu[best].r[1] || (m.r[1] === menu[best].r[1] && m.k < menu[best].k)) best = i; });
+  return best;
+}
 function vCafe(d) {
   const menu = cafeMenu(d), wd = new Date(d + 'T00:00:00').getDay();
   if (!menu.length) return wd === 0 || wd === 6 ? '' : `<div class="muted sm pad">이 날짜의 ${CAFE_NAME} 식단표가 아직 없어요. 아래 대략값이나 검색으로 기록하세요.</div>`;
+  const rec = cafeRecIdx(menu);
   return `<div class="sec">구내식당 메뉴 · ${CAFE_NAME}</div>
-  <div class="list card">${menu.map((m, i) => { const f = cafeFood(m); return `<button class="lrow" data-act="cafe" data-v="${i}"><span class="col f1"><span><b>${m.c}</b> ${esc(m.n)}</span><span class="muted sm">${esc(m.s.join(' · '))}</span><span class="sm">${f.k}kcal · 단백질 ${r0(f.p)}g · 탄수 ${r0(f.c)}g</span></span><span class="acc b sm">담기</span></button>`; }).join('')}</div>
+  <div class="list card">${menu.map((m, i) => { const f = cafeFood(m); return `<button class="lrow" data-act="cafe" data-v="${i}"><span class="col f1"><span><b>${m.c}</b> ${esc(m.n)}${i === rec ? ' <span class="tag rec">추천</span>' : ''}</span><span class="muted sm">${esc(m.s.join(' · '))}</span><span class="sm">${f.k}kcal · 단백질 ${r0(f.p)}g · 탄수 ${r0(f.c)}g</span></span><span class="acc b sm">담기</span></button>`; }).join('')}</div>
   <div class="muted sm">밥이나 반찬을 남겼다면 담은 뒤 −로 양을 줄이세요 (0.5인분 단위). 영양값은 식단표 기준 추정치입니다.</div>`;
 }
 function vFood() {
