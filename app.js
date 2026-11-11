@@ -150,6 +150,7 @@ function fmtSet(type, s) { const w = +s.w || 0; if (type === 'body' || (!w && ty
 
 /* ================= 렌더 ================= */
 const ICON = {
+  play: '<path d="M7 4.5v15l12-7.5z"/>', pause: '<path d="M8 5v14M16 5v14"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
   home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   gym: '<path d="M6 7v10M3 9.5v5M18 7v10M21 9.5v5M6 12h12"/>',
   food: '<path d="M3 11h18a9 9 0 0 1-18 0z"/><path d="M9 7.5c0-1.5 1-2 1-3.5M14 7.5c0-1.5 1-2 1-3.5"/>',
@@ -173,8 +174,9 @@ function render() {
   if (S.overlay === 'search') body = vSearch();
   else if (S.overlay === 'settings') body = vSettings();
   else body = ({ home: vHome, gym: vGym, food: vFood, report: vReport })[S.tab]() + vNav();
-  body += vTimer() + vGuide();
-  $app().innerHTML = body; document.body.classList.toggle('hastimer', !!S.timer);
+  const sb = !S.overlay && S.tab === 'gym' ? vSessBar(S.sel) : '';
+  body += sb + vTimer() + vGuide();
+  $app().innerHTML = body; document.body.classList.toggle('hastimer', !!S.timer); document.body.classList.toggle('hassess', !!sb);
   if (S._keepScroll) window.scrollTo(0, scrollY); S._keepScroll = false;
 }
 function vNav() {
@@ -252,6 +254,21 @@ function vHome() {
   </div>`;
 }
 
+/* ---------- 운동 세션 타이머 (자동 시작 · 일시정지 · 종료) ---------- */
+function fmtDur(sec) { sec = Math.max(0, Math.floor(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), x = sec % 60; return h ? `${h}:${pad(m)}:${pad(x)}` : `${m}:${pad(x)}`; }
+function sess(d) {
+  const day = getDay(d), ts = (day.ex || []).flatMap(e => (e.sets || []).filter(s => s.t).map(s => s.t));
+  const tm = day.timer || {}, start = tm.start || (ts.length ? Math.min(...ts) : null);
+  if (!start) return null;
+  const end = tm.end || (d < today() ? Math.max(...ts, start) : null), pa = tm.pa || null, pt = tm.pt || 0;
+  const state = end ? 'done' : pa ? 'paused' : 'run';
+  return { start, end, pa, pt, state, sec: ((end || pa || Date.now()) - start - pt) / 1000 };
+}
+function sessUpdate(fn) { const now = Date.now(), d = today(), s0 = sess(d); if (!s0) return; mutateDay(d, x => { x.timer = { start: s0.start, pt: s0.pt, pa: s0.pa, end: s0.end }; fn(x.timer, now); }); }
+function vSessBar(d) {
+  const s = d === today() && sess(d); if (!s || s.state === 'done') return '';
+  return `<div class="sessbar"><button class="btn" data-act="sessPause">${s.state === 'paused' ? `${ic('play', 16, 2.4)} 계속하기` : `${ic('pause', 16, 2.4)} 일시정지`}</button><button class="btn pri" data-act="sessEnd">${ic('stop', 16, 2.4)} 운동 종료</button></div>`;
+}
 /* ---------- 3분할 순환 ---------- */
 function splitOfEx(exs) {
   const cnt = {}; (exs || []).forEach(e => { const n = setsDone(e).length || (e.sets || []).length; const p = exInfo(e.name).part; cnt[p] = (cnt[p] || 0) + n; });
@@ -284,10 +301,10 @@ function loadSplit(id) {
 /* ---------- 운동 ---------- */
 function vGym() {
   const d = S.sel, day = getDay(d), ex = day.ex || [];
-  const firstT = Math.min(...ex.flatMap(e => (e.sets || []).filter(s => s.t).map(s => s.t)), Infinity);
-  const elapsed = isFinite(firstT) && d === today() ? Math.floor((Date.now() - firstT) / 1000) : null;
+  const ss = sess(d);
   return `<div class="page">
-  <header class="hdr"><div><div class="muted sm">${fmtDate(d)} · ${dayN(d)}</div><h1>${elapsed != null ? `운동 중 <span class="tnum" id="elapsed" data-start="${firstT}">${Math.floor(elapsed / 60)}:${pad(elapsed % 60)}</span>` : '운동'}</h1></div>${dateBar()}</header>
+  <header class="hdr"><div><div class="muted sm">${fmtDate(d)} · ${dayN(d)}</div><h1>${ss ? `${({ run: '운동 중', paused: '일시정지', done: '운동 완료' })[ss.state]} <span class="tnum" id="elapsed" data-start="${ss.start}" data-pt="${ss.pt}" data-state="${ss.state}">${fmtDur(ss.sec)}</span>` : '운동'}</h1></div>${dateBar()}</header>
+  ${ss && ss.state === 'done' && d === today() ? `<div class="row g6 sm"><span class="muted">운동을 마쳤습니다.</span><button class="chipbtn" data-act="sessResume">이어서 하기</button></div>` : ''}
   ${ex.length ? '' : vSplit(d)}
   ${ex.length ? '' : `<div class="card col"><b>직접 고르려면</b><span class="muted sm">이번 주 부족한 부위: ${(() => { const p = weekParts(weekStart(d)); return MAIN_PARTS.slice().sort((a, b) => p[a] - p[b])[0]; })()}</span></div>`}
   ${ex.map((e, i) => exCard(e, i, d)).join('')}
@@ -580,7 +597,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v13 (11/11 종목 추가 수정)</div>
+    <div class="muted sm">앱 버전 v14 (11/11 운동 일시정지·종료)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -596,7 +613,7 @@ let audioCtx = null;
 function beep() { try { audioCtx ||= new (window.AudioContext || window.webkitAudioContext)(); [0, .25, .5].forEach(t => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.frequency.value = 880; o.connect(g); g.connect(audioCtx.destination); g.gain.setValueAtTime(.2, audioCtx.currentTime + t); o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + .15); }); } catch { } }
 function startTimer(sec) { S.timer = { end: Date.now() + sec * 1000, dur: sec }; try { audioCtx ||= new (window.AudioContext || window.webkitAudioContext)(); } catch { } render(); }
 setInterval(() => {
-  const el = document.getElementById('elapsed'); if (el) { const e = Math.floor((Date.now() - +el.dataset.start) / 1000); el.textContent = `${Math.floor(e / 60)}:${pad(e % 60)}`; }
+  const el = document.getElementById('elapsed'); if (el && el.dataset.state === 'run') el.textContent = fmtDur((Date.now() - +el.dataset.start - +el.dataset.pt) / 1000);
   if (S.timer) {
     const left = Math.max(0, Math.ceil((S.timer.end - Date.now()) / 1000));
     const t = document.getElementById('timerTxt'), f = document.getElementById('timerFill');
@@ -639,6 +656,9 @@ document.addEventListener('click', async ev => {
     case 'cartRecent': { const m = recentFoods().find(x => x.n === v); if (m) addCart(m); break; }
     case 'preset': addCart(PRESETS[+v]); break;
     case 'loadSplit': loadSplit(v); break;
+    case 'sessPause': sessUpdate((t, now) => { if (t.pa) { t.pt = (t.pt || 0) + (now - t.pa); t.pa = null; } else t.pa = now; }); break;
+    case 'sessEnd': S.timer = null; sessUpdate((t, now) => { const ts = (getDay(today()).ex || []).flatMap(e => (e.sets || []).filter(x => x.t).map(x => x.t)), last = ts.length ? Math.max(...ts) : now; let end = t.pa || now; if (end - last > 10 * 60000) end = last + 3 * 60000; /* 종료를 늦게 눌렀으면 마지막 세트 3분 뒤로 */ t.end = end; t.pa = null; }); toast('운동 종료 · 수고하셨습니다'); break;
+    case 'sessResume': sessUpdate((t, now) => { if (t.end) { t.pt = (t.pt || 0) + (now - t.end); t.end = null; } }); break;
     case 'cafe': { const m = cafeMenu(S.sel)[+v]; if (m) addCart(cafeFood(m)); break; }
     case 'qty': { const [i, dlt] = v.split(':'); const c = S.cart[+i]; c.q = Math.round((c.q + +dlt) * 2) / 2; if (c.q <= 0) S.cart.splice(+i, 1); S._keepScroll = true; render(); break; }
     case 'cartSave': { const slot = S.foodSlot, items = S.cart.map(c => ({ id: uid(), slot, n: c.q !== 1 ? `${c.n} ×${c.q}` : c.n, k: r1(c.k * c.q), p: r1(c.p * c.q), c: r1((c.c || 0) * c.q), f: r1((c.f || 0) * c.q) })); S.cart = []; S.fq = ''; mutateDay(S.sel, d => d.meals.push(...items)); toast(`${SLOT_LABEL[slot]}에 ${items.length}개 기록`); window.scrollTo(0, 0); break; }
