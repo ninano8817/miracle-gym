@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
-import { TYPES, PARTS, EXERCISES, FOODS, PRESETS } from './data.js';
+import { TYPES, PARTS, EXERCISES, FOODS, PRESETS, SPLITS } from './data.js';
 import { CAFE, CAFE_NAME } from './menus.js';
 
 /* ================= 기본 ================= */
@@ -252,6 +252,35 @@ function vHome() {
   </div>`;
 }
 
+/* ---------- 3분할 순환 ---------- */
+function splitOfEx(exs) {
+  const cnt = {}; (exs || []).forEach(e => { const n = setsDone(e).length || (e.sets || []).length; const p = exInfo(e.name).part; cnt[p] = (cnt[p] || 0) + n; });
+  let best = null; SPLITS.forEach(sp => { if ((cnt[sp.part] || 0) > 0 && (!best || cnt[sp.part] > cnt[best.part])) best = sp; });
+  return best;
+}
+function splitState(d) {
+  const todaySp = splitOfEx(getDay(d).ex);
+  let last = null;
+  for (const s of sessions()) { if (s.old || s.date >= d) continue; const sp = splitOfEx(s.ex.filter(e => setsDone(e).length)); if (sp && (!last || s.date > last.date)) last = { date: s.date, sp }; }
+  const next = last ? SPLITS[(SPLITS.indexOf(last.sp) + 1) % SPLITS.length] : SPLITS[0];
+  return { todaySp, last, next };
+}
+function vSplit(d) {
+  const { last, next } = splitState(d);
+  return `<div class="card col">
+    <div class="between"><b>오늘은 ${next.name} 차례</b><span class="muted sm">${last ? `지난번 ${md(last.date)} ${last.sp.name}` : '3분할 시작'}</span></div>
+    <span class="sm">${next.name} ${next.sub}</span>
+    <span class="muted sm">${next.ex.join(' · ')}</span>
+    <button class="btn pri" data-act="loadSplit" data-v="${next.id}">${next.name} 루틴 불러오기</button>
+    <div class="row g6 sm"><span class="muted">다른 날로:</span>${SPLITS.filter(x => x !== next).map(x => `<button class="chipbtn" data-act="loadSplit" data-v="${x.id}">${x.name}</button>`).join('')}</div>
+  </div>`;
+}
+function loadSplit(id) {
+  const sp = SPLITS.find(x => x.id === id); if (!sp) return;
+  const have = new Set((getDay(S.sel).ex || []).map(e => e.name)), add = sp.ex.filter(n => !have.has(n));
+  mutateDay(S.sel, d => add.forEach(name => { const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = last && !last.old ? Math.max(3, last.sets.length) : 3; d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }); }));
+  render(); toast(`${sp.name} 루틴 ${add.length}종목 불러옴`);
+}
 /* ---------- 운동 ---------- */
 function vGym() {
   const d = S.sel, day = getDay(d), ex = day.ex || [];
@@ -259,7 +288,8 @@ function vGym() {
   const elapsed = isFinite(firstT) && d === today() ? Math.floor((Date.now() - firstT) / 1000) : null;
   return `<div class="page">
   <header class="hdr"><div><div class="muted sm">${fmtDate(d)} · ${dayN(d)}</div><h1>${elapsed != null ? `운동 중 <span class="tnum" id="elapsed" data-start="${firstT}">${Math.floor(elapsed / 60)}:${pad(elapsed % 60)}</span>` : '운동'}</h1></div>${dateBar()}</header>
-  ${ex.length ? '' : `<div class="card col"><b>오늘 할 종목을 추가하세요</b><span class="muted sm">이번 주 부족한 부위: ${(() => { const p = weekParts(weekStart(d)); return MAIN_PARTS.slice().sort((a, b) => p[a] - p[b])[0]; })()}</span></div>`}
+  ${ex.length ? '' : vSplit(d)}
+  ${ex.length ? '' : `<div class="card col"><b>직접 고르려면</b><span class="muted sm">이번 주 부족한 부위: ${(() => { const p = weekParts(weekStart(d)); return MAIN_PARTS.slice().sort((a, b) => p[a] - p[b])[0]; })()}</span></div>`}
   ${ex.map((e, i) => exCard(e, i, d)).join('')}
   <button class="dashed" data-act="openSearch">${ic('search', 18, 2.2)} 종목 검색해서 추가</button>
   <div class="card col">
@@ -549,7 +579,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v11 (11/11 하체 포함)</div>
+    <div class="muted sm">앱 버전 v12 (11/11 3분할 순환)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -607,6 +637,7 @@ document.addEventListener('click', async ev => {
     case 'cartAdd': { const f = foodPool().find(x => x.n === v); if (f) addCart(f); break; }
     case 'cartRecent': { const m = recentFoods().find(x => x.n === v); if (m) addCart(m); break; }
     case 'preset': addCart(PRESETS[+v]); break;
+    case 'loadSplit': loadSplit(v); break;
     case 'cafe': { const m = cafeMenu(S.sel)[+v]; if (m) addCart(cafeFood(m)); break; }
     case 'qty': { const [i, dlt] = v.split(':'); const c = S.cart[+i]; c.q = Math.round((c.q + +dlt) * 2) / 2; if (c.q <= 0) S.cart.splice(+i, 1); S._keepScroll = true; render(); break; }
     case 'cartSave': { const slot = S.foodSlot, items = S.cart.map(c => ({ id: uid(), slot, n: c.q !== 1 ? `${c.n} ×${c.q}` : c.n, k: r1(c.k * c.q), p: r1(c.p * c.q), c: r1((c.c || 0) * c.q), f: r1((c.f || 0) * c.q) })); S.cart = []; S.fq = ''; mutateDay(S.sel, d => d.meals.push(...items)); toast(`${SLOT_LABEL[slot]}에 ${items.length}개 기록`); window.scrollTo(0, 0); break; }
