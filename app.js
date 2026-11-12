@@ -662,7 +662,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v21 (11/12 밀리터리 프레스 · EZ바 7kg)</div>
+    <div class="muted sm">앱 버전 v22 (11/12 하체 루틴에 밀리터리 프레스)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
