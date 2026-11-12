@@ -1,5 +1,5 @@
 // Miracle GYM service worker: 네트워크 우선, 실패 시 캐시 (오프라인에서도 앱이 열리도록)
-const CACHE = 'mg-v22';
+const CACHE = 'mg-v23';
 const SHELL = ['./', './index.html', './app.js', './data.js', './menus.js', './config.js', './manifest.webmanifest', './icons/icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

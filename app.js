@@ -103,9 +103,11 @@ async function loadDocs() {
   Object.keys(pending).forEach(k => next[k] = pending[k]);
   S.docs = next; saveJSON('mg_cache', S.docs); setSync(Object.keys(pending).length ? 'saving' : 'ok'); requestRender();
 }
+const SC_NAME = '건강 데이터 서버 동기화';
 function setSync(s) { S.syncing = s; const el = document.getElementById('syncdot'); if (el) el.className = 'syncdot ' + s; }
 window.addEventListener('online', flush);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.user) { loadDocs(); flush(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.user) { loadDocs(); flush();
+  if (S.scWait && Date.now() - S.scWait < 10 * 60e3) { [2500, 6000].forEach(t => setTimeout(loadDocs, t)); setTimeout(() => { S.scWait = null; requestRender(); }, 6500); } } });
 
 /* ================= 계산 ================= */
 function sumMeals(day) { const t = { k: 0, p: 0, c: 0, f: 0 }; (day.meals || []).forEach(m => { t.k += +m.k || 0; t.p += +m.p || 0; t.c += +m.c || 0; t.f += +m.f || 0; }); return t; }
@@ -161,6 +163,7 @@ const ICON = {
   gear: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7"/>', plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>', left: '<path d="M15 5l-7 7 7 7"/>', right: '<path d="M9 5l7 7-7 7"/>',
+  sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 };
 const ic = (n, s = 20, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
@@ -254,6 +257,7 @@ function vHome() {
     ${editF ? `<input class="bignum" id="hIn" type="number" inputmode="decimal" step="0.1" value="${h.fat ?? ''}" placeholder="${lf ? r1(lf.f) : '24.4'}" data-health="fat" style="max-width:120px">`
     : `<span class="row g6"><b class="lg">${lf ? `<span class="${h.fat != null ? '' : 'muted'}">${r1(lf.f)}</span>` : '<span class="muted">–</span>'}<small class="muted"> %</small></b>${lf && pf && pf.d !== lf.d ? `<span class="sm b ${lf.f <= pf.f ? 'acc' : 'warnt'}">${lf.f - pf.f > 0 ? '+' : ''}${r1(lf.f - pf.f)}%p</span>` : ''}<span class="muted sm">표준 17~22</span></span>`}
   </div>`; })()}
+  ${d === today() ? `<button class="card tap row between syncbtn" data-act="runShortcut"><span class="row g6">${ic('sync', 18, 2.2)}<span class="col"><b>아이폰 건강 데이터 불러오기</b><span class="muted sm">${S.scWait ? '단축어 실행 후 돌아오면 반영돼요' : '체중 · 걸음 · 체지방을 지금 바로 반영'}</span></span></span>${ic('right', 18, 2.2)}</button>` : ''}
   <div class="card col">
     <div class="between"><b>단백질</b><span class="muted sm">열량 ${r0(t.k).toLocaleString()} / ${st.targets.kcal.toLocaleString()}</span></div>
     <div class="huge">${r0(t.p)}<small> / ${st.targets.p}g</small></div>
@@ -641,6 +645,7 @@ function vSettings() {
   </div>
   <div class="card col">
     <b>아이폰 건강 데이터 자동 수집</b>
+    <label class="field"><span>홈 '불러오기' 버튼이 실행할 단축어 이름 (단축어 앱의 이름과 똑같이)</span><input type="text" data-setting-text="scName" value="${esc(st.scName || SC_NAME)}" autocomplete="off"></label>
     <span class="sm muted">단축어 앱에서 아래 순서로 한 번만 만들어 두면, 매일 자동으로 체중·걸음이 들어옵니다.</span>
     ${tok ? `<ol class="sm guide">
       <li>단축어 → <b>+</b> → 이름 <code>Miracle GYM 보내기</code></li>
@@ -662,7 +667,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v22 (11/12 하체 루틴에 밀리터리 프레스)</div>
+    <div class="muted sm">앱 버전 v23 (11/12 건강 데이터 불러오기 버튼)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -722,6 +727,7 @@ document.addEventListener('click', async ev => {
     case 'preset': addCart(PRESETS[+v]); break;
     case 'loadSplit': loadSplit(v); break;
     case 'wRange': S.wRange = v; S.wSel = null; render(); break;
+    case 'runShortcut': { const n = (settings().scName || '').trim() || SC_NAME; S.scWait = Date.now(); location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(n); setTimeout(requestRender, 300); break; }
     case 'wMetric': S.wMetric = v; S.wSel = null; render(); break;
     case 'wPt': S.wSel = S.wSel === +v ? null : +v; S._keepScroll = true; render(); break;
     case 'sessPause': sessUpdate((t, now) => { if (t.pa) { t.pt = (t.pt || 0) + (now - t.pa); t.pa = null; } else t.pa = now; }); break;
@@ -798,6 +804,7 @@ document.addEventListener('change', ev => {
     return;
   }
   if (el.dataset.health) { const f = el.dataset.health, val = num(el.value); const h = Object.assign({}, getHealth(S.sel)); h[f] = val; h.src = 'manual'; S.editHealth = null; setDoc('health:' + S.sel, h); render(); return; }
+  if (el.dataset.settingText) { const k = el.dataset.settingText, v = el.value.trim(); mutateSettings(s => { s[k] = v; }); toast('저장했어요'); return; }
   if (el.dataset.setting) {
     const path = el.dataset.setting.split('.'), val = el.type === 'date' ? el.value : num(el.value); if (val == null || val === '') return;
     mutateSettings(s => { let o = s; path.slice(0, -1).forEach(p => o = o[p] = o[p] || {}); o[path[path.length - 1]] = val; }); toast('저장했어요');
