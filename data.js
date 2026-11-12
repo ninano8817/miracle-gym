@@ -40,6 +40,8 @@ export const EXERCISES = [
 
   { name: '스미스 숄더프레스', en: 'smith shoulder press', alias: '숄더프레스 밀리터리', part: '어깨', type: 'smith', gym: true, reps: '8-12', img: 'Smith_Machine_Overhead_Shoulder_Press',
     g: ['어깨 전체 · 삼두', ['벤치를 세워 바가 얼굴 앞을 지나게', '턱 높이에서 시작해 머리 위로 밀기', '팔이 거의 펴지면 천천히 내리기'], ['허리를 크게 젖힘', '바를 목 뒤로 내림'], '덤벨 숄더프레스'] },
+  { name: '밀리터리 프레스', en: 'seated military press ez bar overhead press', alias: '오버헤드 프레스 OHP EZ바 이지바 시티드 숄더프레스', part: '어깨', type: 'barbell', bar: 7, gym: true, reps: '8-12', img: 'Seated_Barbell_Military_Press',
+    g: ['어깨 전체 · 삼두', ['벤치에 앉아 등을 등받이에 붙이기', '쇄골 높이에서 바를 잡고 머리 위로 밀기', '팔이 거의 펴지면 턱 높이까지 천천히 내리기'], ['허리를 크게 젖힘', '바를 목 뒤로 내림', '반동으로 밀기'], '스미스 숄더프레스'] },
   { name: '덤벨 숄더프레스', en: 'dumbbell shoulder press', alias: '덤벨숄더', part: '어깨', type: 'dumbbell', gym: true, reps: '8-12', img: 'Dumbbell_Shoulder_Press',
     g: ['어깨 · 삼두', ['덤벨을 귀 옆에서 시작', '머리 위로 밀어 올리기', '귀 높이까지 천천히 내리기'], ['허리 젖힘', '반동 사용'], '스미스 숄더프레스'] },
   { name: '사이드 레터럴 레이즈', en: 'side lateral raise', alias: '사레레 레터럴', part: '어깨', type: 'dumbbell', gym: true, reps: '12-15', img: 'Side_Lateral_Raise',

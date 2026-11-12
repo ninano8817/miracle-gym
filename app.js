@@ -144,10 +144,11 @@ function suggest(name, before) {
     const low = Math.min(...sets.map(s => +s.w || 0)); const lowAll = sets.filter(s => (+s.w || 0) === low).every(s => (+s.r || 0) >= hi);
     return lowAll ? { w: Math.max(0, low - 5), r: lo, text: `지난번 모두 ${hi}회 → 보조 −5kg 추천`, up: true } : { w: low, r: hi, text: `보조 ${low}kg 유지 · 반복 수 늘리기`, up: false };
   }
-  if (allHit) { const inc = type === 'dumbbell' ? 1 : type === 'barbell' || type === 'machine' || type === 'cable' ? 5 : 2.5; return { w: top + inc, r: lo, text: `지난번 모두 ${hi}회 달성 → ${fmtW(type, top + inc)} 추천`, up: true }; }
-  return { w: top, r: hi, text: `${fmtW(type, top)} 유지 · 모든 세트 ${hi}회 목표`, up: false };
+  if (allHit) { const inc = type === 'dumbbell' ? 1 : type === 'barbell' || type === 'machine' || type === 'cable' ? 5 : 2.5; return { w: top + inc, r: lo, text: `지난번 모두 ${hi}회 달성 → ${fmtW(type, top + inc, barOf(info))} 추천`, up: true }; }
+  return { w: top, r: hi, text: `${fmtW(type, top, barOf(info))} 유지 · 모든 세트 ${hi}회 목표`, up: false };
 }
-function fmtW(type, w) { if (w == null) return ''; if (type === 'barbell') return `${r1(w)}kg(한쪽 ${r2((w - settings().bar) / 2)})`; if (type === 'assist') return `보조 ${r1(w)}kg`; return `${r1(w)}kg`; }
+function barOf(info) { return info && info.bar != null ? info.bar : settings().bar; }
+function fmtW(type, w, bar = settings().bar) { if (w == null) return ''; if (type === 'barbell') return `${r1(w)}kg(한쪽 ${r2((w - bar) / 2)})`; if (type === 'assist') return `보조 ${r1(w)}kg`; return `${r1(w)}kg`; }
 function fmtSet(type, s) { const w = +s.w || 0; if (type === 'body' || (!w && type !== 'assist')) return `${s.r ?? '-'}${type === 'time' ? '초' : '회'}`; return `${type === 'assist' ? '보조 ' : ''}${r1(w)}×${s.r ?? '-'}`; }
 
 /* ================= 렌더 ================= */
@@ -334,7 +335,7 @@ function vGym() {
   <div style="height:${S.timer ? 150 : 20}px"></div></div>`;
 }
 function exCard(e, i, d) {
-  const info = exInfo(e.name), T = TYPES[info.type] || TYPES.dumbbell, last = lastSession(e.name, d), sg = suggest(e.name, d), bar = settings().bar;
+  const info = exInfo(e.name), T = TYPES[info.type] || TYPES.dumbbell, last = lastSession(e.name, d), sg = suggest(e.name, d), bar = barOf(info);
   const doneN = (e.sets || []).filter(s => s.done).length;
   const rows = (e.sets || []).map((s, j) => {
     const prev = last && last.sets[j] ? fmtSet(info.type, last.sets[j]) : '-';
@@ -661,7 +662,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v20 (11/12 플랭크 검색 개선)</div>
+    <div class="muted sm">앱 버전 v21 (11/12 밀리터리 프레스 · EZ바 7kg)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -792,7 +793,7 @@ document.addEventListener('change', ev => {
   if (el.dataset.set) {
     const [i, j, k] = el.dataset.set.split(':'); let val = num(el.value);
     const d0 = getDay(S.sel), info = exInfo(d0.ex[+i].name);
-    if (k === 'w' && val != null && info.type === 'barbell') { val = r2(settings().bar + val * 2); const sm = document.querySelector(`[data-sum="${i}:${j}"]`); if (sm) sm.textContent = '합 ' + r1(val); }
+    if (k === 'w' && val != null && info.type === 'barbell') { val = r2(barOf(info) + val * 2); const sm = document.querySelector(`[data-sum="${i}:${j}"]`); if (sm) sm.textContent = '합 ' + r1(val); }
     mutateDayQuiet(S.sel, d => { const e = d.ex[+i]; e.sets[+j][k] = val; if (k === 'w' && val != null) e.sets.forEach((s, x) => { if (x > +j && s.w == null && !s.done) s.w = val; }); });
     return;
   }
