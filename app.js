@@ -103,6 +103,37 @@ async function loadDocs() {
   Object.keys(pending).forEach(k => next[k] = pending[k]);
   S.docs = next; saveJSON('mg_cache', S.docs); setSync(Object.keys(pending).length ? 'saving' : 'ok'); requestRender();
 }
+/* ---------- 운동 카드 끌어서 순서 바꾸기 ---------- */
+let DRAG = null;
+document.addEventListener('pointerdown', ev => {
+  const g = ev.target.closest && ev.target.closest('.grip'); if (!g) return;
+  const card = g.closest('.excard'), cards = [...document.querySelectorAll('.excard')]; if (cards.length < 2) return;
+  ev.preventDefault(); try { g.setPointerCapture(ev.pointerId); } catch { }
+  const sy = window.scrollY, rects = cards.map(c => c.getBoundingClientRect()), from = cards.indexOf(card);
+  const gap = cards.length > 1 ? Math.max(0, rects[1].top - rects[0].bottom) : 12;
+  DRAG = { g, card, cards, from, to: from, y0: ev.clientY, cy: ev.clientY, sy, mids: rects.map(r => r.top + sy + r.height / 2), step: rects[from].height + gap, pend: false };
+  card.classList.add('dragging'); document.body.classList.add('dragmode');
+  DRAG.raf = requestAnimationFrame(dragTick);
+}, { passive: false });
+function dragLayout() {
+  const D = DRAG, dy = D.cy - D.y0 + (window.scrollY - D.sy), c = D.mids[D.from] + dy; let to = D.from;
+  D.mids.forEach((m, k) => { if (k > D.from && c > m) to = Math.max(to, k); if (k < D.from && c < m) to = Math.min(to, k); });
+  D.to = to; D.card.style.transform = `translateY(${dy}px)`;
+  D.cards.forEach((el, k) => { if (k === D.from) return; const sh = k > D.from && k <= to ? -D.step : k < D.from && k >= to ? D.step : 0; el.style.transform = sh ? `translateY(${sh}px)` : ''; });
+}
+function dragTick() {
+  if (!DRAG) return; const H = window.innerHeight, edge = 90;
+  if (DRAG.cy > H - edge - 70) window.scrollBy(0, Math.min(14, (DRAG.cy - (H - edge - 70)) / 5)); else if (DRAG.cy < edge) window.scrollBy(0, -Math.min(14, (edge - DRAG.cy) / 5));
+  dragLayout(); DRAG.raf = requestAnimationFrame(dragTick);
+}
+document.addEventListener('pointermove', ev => { if (!DRAG) return; ev.preventDefault(); DRAG.cy = ev.clientY; }, { passive: false });
+function dragEnd() {
+  if (!DRAG) return; const D = DRAG; DRAG = null; cancelAnimationFrame(D.raf);
+  D.cards.forEach(el => { el.style.transform = ''; }); D.card.classList.remove('dragging'); document.body.classList.remove('dragmode');
+  if (D.to !== D.from) { mutateDay(S.sel, d => { const [m] = d.ex.splice(D.from, 1); d.ex.splice(D.to, 0, m); }); toast('순서를 바꿨어요'); }
+  else if (D.pend) render();
+}
+document.addEventListener('pointerup', dragEnd); document.addEventListener('pointercancel', dragEnd);
 const SC_NAME = '건강 데이터 서버 동기화';
 function setSync(s) { S.syncing = s; const el = document.getElementById('syncdot'); if (el) el.className = 'syncdot ' + s; }
 window.addEventListener('online', flush);
@@ -164,6 +195,7 @@ const ICON = {
   check: '<path d="M5 12.5l4.5 4.5L19 7"/>', plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>', left: '<path d="M15 5l-7 7 7 7"/>', right: '<path d="M9 5l7 7-7 7"/>',
   sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>',
+  grip: '<path d="M5 9h14M5 15h14"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 };
 const ic = (n, s = 20, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
@@ -172,6 +204,7 @@ function requestRender() { const a = document.activeElement; if (a && /INPUT|TEX
 document.addEventListener('focusout', () => setTimeout(() => { if (S.needsRender) { const a = document.activeElement; if (!(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) { S.needsRender = false; render(); } } }, 400)); // 탭(클릭)이 끝난 뒤에 다시 그리도록 여유
 
 function render() {
+  if (DRAG) { DRAG.pend = true; return; }
   S.needsRender = false;
   if (!S.ready) { $app().innerHTML = `<div class="center muted">불러오는 중…</div>`; return; }
   if (!S.user) { $app().innerHTML = vAuth(); return; }
@@ -351,8 +384,8 @@ function exCard(e, i, d) {
       <label class="cell"><input type="number" inputmode="numeric" value="${s.r ?? ''}" placeholder="${sg.r ?? ''}" data-set="${i}:${j}:r" aria-label="${j + 1}세트 ${info.type === 'time' ? '초' : '회'}"></label>
       <button class="chk ${s.done ? 'on' : ''}" data-act="setDone" data-v="${i}:${j}" aria-label="${j + 1}세트 완료">${ic('check', 18, 3)}</button></div>`;
   }).join('');
-  return `<div class="card excard">
-    <div class="between"><div class="col"><b class="lg">${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''}</span></div>
+  return `<div class="card excard" data-ex="${i}">
+    <div class="between"><div class="row g6 grow"><button class="grip" aria-label="${esc(e.name)} 순서 옮기기 (끌기)">${ic('grip', 20, 2.4)}</button><div class="col"><b class="lg">${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''}</span></div></div>
       <div class="row g4"><span class="pill">${doneN} / ${(e.sets || []).length}</span><button class="iconbtn sm round acc" data-act="guide" data-v="${esc(e.name)}" aria-label="${esc(e.name)} 자세 보기">${ic('info', 18)}</button></div></div>
     <div class="sethead"><span>세트</span><span>지난번</span><span>${T.input || ''}${T.input ? ' kg' : ''}</span><span>${info.type === 'time' ? '초' : '회'}</span><span></span></div>
     ${rows}
@@ -667,7 +700,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v23 (11/12 건강 데이터 불러오기 버튼)</div>
+    <div class="muted sm">앱 버전 v24 (11/13 운동 순서 끌기 · 하단 바 고정)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
