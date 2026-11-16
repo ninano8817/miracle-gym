@@ -341,16 +341,25 @@ function splitOfEx(exs) {
   return best;
 }
 function splitState(d) {
-  const todaySp = splitOfEx(getDay(d).ex);
-  let last = null;
-  for (const s of sessions()) { if (s.old || s.date >= d) continue; const sp = splitOfEx(s.ex.filter(e => setsDone(e).length)); if (sp && (!last || s.date > last.date)) last = { date: s.date, sp }; }
-  const next = last ? SPLITS[(SPLITS.indexOf(last.sp) + 1) % SPLITS.length] : SPLITS[0];
-  return { todaySp, last, next };
+  const todaySp = splitOfEx(getDay(d).ex), legs = SPLITS.find(x => x.id === 'legs'), ws = weekStart(d);
+  let last = null, lastOther = null, lastLeg = null, legWeek = 0;
+  for (const s of sessions()) {
+    if (s.old || s.date >= d) continue; const done = s.ex.filter(e => setsDone(e).length), sp = splitOfEx(done); if (!sp) continue;
+    if (!last || s.date > last.date) last = { date: s.date, sp };
+    if (sp !== legs && (!lastOther || s.date > lastOther.date)) lastOther = { date: s.date, sp };
+    const legSets = done.reduce((a, e) => a + (exInfo(e.name).part === '하체' ? setsDone(e).length : 0), 0);
+    if (legSets >= 6) { if (!lastLeg || s.date > lastLeg) lastLeg = s.date; if (s.date >= ws) legWeek++; }
+  }
+  const gap = lastLeg ? Math.round((parseD(d) - parseD(lastLeg)) / 864e5) : 99;
+  // 하체 주 2회: 이번 주 2회 미만이고 마지막 하체 후 3일 이상 지났으면 하체, 아니면 가슴·등 번갈아
+  const legDue = legWeek < 2 && gap >= 3 && !(last && last.sp === legs);
+  const next = legDue ? legs : lastOther && lastOther.sp.id === 'chest' ? SPLITS.find(x => x.id === 'back') : SPLITS.find(x => x.id === 'chest');
+  return { todaySp, last, next, legWeek };
 }
 function vSplit(d) {
-  const { last, next } = splitState(d);
+  const { last, next, legWeek } = splitState(d);
   return `<div class="card col">
-    <div class="between"><b>오늘은 ${next.name} 차례</b><span class="muted sm">${last ? `지난번 ${md(last.date)} ${last.sp.name}` : '3분할 시작'}</span></div>
+    <div class="between"><b>오늘은 ${next.name} 차례</b><span class="muted sm">${last ? `지난번 ${md(last.date)} ${last.sp.name}` : '3분할 시작'} · 이번 주 하체 ${legWeek}/2</span></div>
     <span class="sm">${next.name} ${next.sub}</span>
     <span class="muted sm">${next.ex.join(' · ')}</span>
     <button class="btn pri" data-act="loadSplit" data-v="${next.id}">${next.name} 루틴 불러오기</button>
@@ -714,7 +723,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v26 (11/16 코치에게 보낼 기록 복사)</div>
+    <div class="muted sm">앱 버전 v27 (11/16 하체 주 2회 루틴 추천)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
