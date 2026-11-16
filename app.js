@@ -134,6 +134,19 @@ function dragEnd() {
   else if (D.pend) render();
 }
 document.addEventListener('pointerup', dragEnd); document.addEventListener('pointercancel', dragEnd);
+// 코치에게 보낼 기록 요약 (채팅 붙여넣기용 텍스트)
+function coachLog(n) {
+  const st = settings(), out = [`Miracle GYM 기록 · 최근 ${n}일 (목표 ${st.targets.kcal}kcal / 단백질 ${st.targets.p}g)`];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = addDays(today(), -i), day = getDay(d), h = getHealth(d), t = sumMeals(day), L = [];
+    if (h.weight != null) L.push(`체중 ${r1(h.weight)}`); if (h.fat != null) L.push(`체지방 ${r1(h.fat)}%`); if (h.steps != null) L.push(`걸음 ${h.steps}`); if (h.active != null) L.push(`활동 ${r0(h.active)}kcal`);
+    if ((day.meals || []).length) L.push(`식단 ${r0(t.k)}kcal P${r0(t.p)} C${r0(t.c)} F${r0(t.f)} (${day.meals.map(m => m.n).join(', ')})`);
+    (day.ex || []).forEach(e => { const info = exInfo(e.name), ss = setsDone(e); if (ss.length) L.push(`${e.name} ${ss.map(x => fmtSet(info.type, x)).join(' / ')}`); });
+    (day.cardio || []).forEach(c => L.push(`${c.type} ${c.min ? c.min + '분' : ''}${c.km ? ' ' + c.km + 'km' : ''}`));
+    out.push(`${d}(${DOW[parseD(d).getDay()]}) ` + (L.length ? L.join(' | ') : '기록 없음'));
+  }
+  return out.join('\n');
+}
 const SC_NAME = '건강 데이터 서버 동기화';
 function setSync(s) { S.syncing = s; const el = document.getElementById('syncdot'); if (el) el.className = 'syncdot ' + s; }
 window.addEventListener('online', flush);
@@ -580,6 +593,7 @@ function vReport() {
   const upper = MAIN_PARTS, top = upper.slice().sort((a, b) => parts[b] - parts[a])[0], low = upper.slice().sort((a, b) => parts[a] - parts[b])[0];
   return `<div class="page">
   <header class="hdr"><h1>리포트</h1><div class="row g4"><button class="iconbtn" data-act="wprev" aria-label="이전 주">${ic('left', 16, 2.4)}</button><b class="sm">${md(ws)} – ${md(we)}</b><button class="iconbtn" data-act="wnext" aria-label="다음 주" ${we >= today() ? 'disabled' : ''}>${ic('right', 16, 2.4)}</button></div></header>
+  <button class="card tap row between syncbtn" data-act="copyLog" data-v="14"><span class="col"><b>코치에게 보낼 기록 복사</b><span class="muted sm">최근 14일 체중·식단·운동을 텍스트로 복사 → 채팅에 붙여넣기</span></span>${ic('right', 18, 2.2)}</button>
   ${vWeightCard()}
   <div class="card col">
     <div class="between"><b>단백질 ${st.targets.p}g 달성</b><span class="muted sm">${hit} / 7일</span></div>
@@ -700,7 +714,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v25 (11/16 11월 3주 식단표)</div>
+    <div class="muted sm">앱 버전 v26 (11/16 코치에게 보낼 기록 복사)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -800,6 +814,7 @@ document.addEventListener('click', async ev => {
     case 'wprev': S.reportWeek = addDays(S.reportWeek || weekStart(today()), -7); render(); break;
     case 'wnext': S.reportWeek = addDays(S.reportWeek || weekStart(today()), 7); render(); break;
     case 'makeToken': await makeToken(); break;
+    case 'copyLog': try { await navigator.clipboard.writeText(coachLog(+v || 14)); toast('최근 ' + (+v || 14) + '일 기록을 복사했어요. 채팅에 붙여넣으세요'); } catch { toast('복사가 막혀 있어요'); } break;
     case 'copy': try { await navigator.clipboard.writeText(v); toast('복사했어요'); } catch { toast('복사가 막혀 있어요'); } break;
     case 'exportData': try { await navigator.clipboard.writeText(JSON.stringify(S.docs)); toast('전체 백업을 복사했어요'); } catch { toast('복사가 막혀 있어요'); } break;
     case 'logout': await sb.auth.signOut(); S.docs = {}; localStorage.removeItem('mg_cache'); S.overlay = null; render(); break;
