@@ -729,28 +729,37 @@ function vWeightCard() {
       <div class="huge">${big != null ? (r === 'd' || sel ? r2(big) : r1(big)) : '–'}<small> ${U}</small></div>
       <span class="muted sm">${sel ? sel.tip : rangeText(start, end)}</span>
     </div>
-    ${wChart(pts, r)}
-    <div class="legend sm"><span><i class="lg-act"></i>실제</span><span><i class="lg-plan"></i>목표(예상)</span>${cmpP ? `<span class="${stP.c} b">최근 7일 목표 대비 ${Math.abs(cmpP.diff) < 0.05 ? '±0' : (cmpP.diff > 0 ? '+' : '') + r1(cmpP.diff)}${F ? '%p' : 'kg'} · ${stP.t}</span>` : ''}</div>
+    ${(() => { const td = pv(today()), tv = val(today()), lv = (F ? latestFat(today()) : latestWeight(today())); if (td == null || r === 'plan') return '';
+      const cur = tv != null ? tv : lv ? (F ? lv.f : lv.w) : null, tol = F ? 0.5 : 0.3, wk = cmpP;
+      return `<div class="plansum sm"><div><span class="muted">오늘 목표</span><b>${r1(td)}${U}</b><span class="muted">허용 ${r1(td - tol)}~${r1(td + tol)}</span></div><div><span class="muted">${tv != null ? '오늘 측정' : '최근 측정'}</span><b>${cur != null ? r1(cur) + U : '–'}</b>${cur != null ? `<span class="${cur - td > tol ? 'warnt' : 'acc'}">${cur - td > 0 ? '+' : ''}${r1(cur - td)}</span>` : ''}</div><div><span class="muted">7일 평균 판정</span><b class="${wk ? stP.c : ''}">${wk ? stP.t : '–'}</b>${wk ? `<span class="muted">목표 대비 ${Math.abs(wk.diff) < 0.05 ? '±0' : (wk.diff > 0 ? '+' : '') + r1(wk.diff)}</span>` : ''}</div></div>`; })()}
+    ${wChart(pts, r, F ? 0.5 : 0.3, U)}
+    <div class="legend sm"><span><i class="lg-act"></i>실제</span><span><i class="lg-plan"></i>목표(예상)</span><span><i class="lg-band"></i>목표 범위 ±${F ? '0.5%p' : '0.3kg'}</span></div>
+    <span class="muted sm">하루 체중은 수분·식사로 ±0.5kg 출렁여요. 하루 값보다 <b>7일 평균이 회색 범위 안</b>에 있는지로 판단하세요.</span>
     <div class="wfoot sm">${diff != null ? `<span class="b ${diff <= 0 ? 'acc' : 'warnt'}">${cmpLabel} ${diff > 0 ? '+' : ''}${r1(diff)}${F ? '%p' : 'kg'}</span>` : `<span class="muted">${cmpLabel}: 비교할 기록 없음</span>`}${F ? (lf ? `<span class="muted">표준 22%까지 ${r1(Math.max(0, lf.f - 22))}%p</span>` : '') : (lw ? `<span class="muted">목표 70kg까지 ${r1(Math.max(0, lw.w - 70))}kg</span>` : '')}</div>
     <span class="muted sm">점을 누르면 그날(그 기간) 값이 위에 표시됩니다.</span>
   </div>`;
 }
 function niceStep(span) { return [0.5, 1, 2, 5, 10].find(s => span / s <= 4) || 10; }
-function wChart(pts, r) {
+function wChart(pts, r, tol = 0.3, unit = 'kg') {
   const ys = pts.map(p => p.w).filter(v => v != null), ps = pts.map(p => p.pl).filter(v => v != null);
   if (!ys.length && !ps.length) return '<div class="muted sm pad">이 기간에는 기록이 없습니다.</div>';
-  let mn = Math.min(...ys, ...ps), mx = Math.max(...ys, ...ps); if (mx - mn < 1) { mn -= .6; mx += .6; }
+  let mn = Math.min(...ys, ...ps.map(v => v - tol)), mx = Math.max(...ys, ...ps.map(v => v + tol)); if (mx - mn < 1) { mn -= .6; mx += .6; }
   const step = niceStep(mx - mn), lo = Math.floor(mn / step) * step, hi = Math.ceil(mx / step) * step;
   const W = 340, H = 190, L = 4, R = 36, T = 10, B = r === 'w' || r === 'm' || r === 'plan' ? 34 : 22, n = pts.length;
   const X = i => n === 1 ? (L + W - R) / 2 : L + 8 + i / (n - 1) * (W - R - L - 16), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
   const grid = []; for (let v = lo; v <= hi + 1e-9; v += step) grid.push(v);
+  const bi = pts.map((p, i) => p.pl != null ? i : null).filter(i => i != null);
+  const band = bi.length > 1 ? `<polygon points="${bi.map(i => `${X(i).toFixed(1)},${Y(pts[i].pl + tol).toFixed(1)}`).join(' ')} ${bi.slice().reverse().map(i => `${X(i).toFixed(1)},${Y(pts[i].pl - tol).toFixed(1)}`).join(' ')}" class="pband"/>` : '';
+  const li = bi.length ? bi[bi.length - 1] : null, lt = li != null && r !== 'plan' ? `<text x="${X(li) - 4}" y="${Y(pts[li].pl) + (pts[li].w != null && pts[li].w < pts[li].pl ? -10 : 16)}" class="pltxt" text-anchor="end">목표 ${r1(pts[li].pl)}</text>` : '';
   const pline = pts.map((p, i) => p.pl != null ? `${X(i).toFixed(1)},${Y(p.pl).toFixed(1)}` : null).filter(Boolean);
   const line = pts.map((p, i) => p.w != null ? `${X(i).toFixed(1)},${Y(p.w).toFixed(1)}` : null).filter(Boolean);
   return `<svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="체중 그래프">
     ${grid.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="gl"/><text x="${W - R + 6}" y="${Y(v) + 4}" class="yl">${step < 1 ? v.toFixed(1) : v}</text>`).join('')}
     ${pts.map((p, i) => p.tick ? `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${H - B}" class="vl"/><text x="${X(i)}" y="${H - B + 14}" class="xl">${p.label}</text>${p.sub ? `<text x="${X(i)}" y="${H - B + 27}" class="xl">(${p.sub})</text>` : ''}` : '').join('')}
+    ${band}
     ${pline.length > 1 ? `<polyline points="${pline.join(' ')}" class="pll"/>` : pline.length === 1 ? `<circle cx="${pline[0].split(',')[0]}" cy="${pline[0].split(',')[1]}" r="3" class="plp"/>` : ''}
     ${line.length > 1 ? `<polyline points="${line.join(' ')}" class="wl"/>` : ''}
+    ${lt}
     ${pts.map((p, i) => p.w != null ? `<circle cx="${X(i)}" cy="${Y(p.w)}" r="${S.wSel === i ? 6 : 4.5}" class="wp${S.wSel === i ? ' on' : ''}"/><circle cx="${X(i)}" cy="${Y(p.w)}" r="14" fill="transparent" data-act="wPt" data-v="${i}"/>` : '').join('')}
   </svg>`;
 }
@@ -798,7 +807,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v28 (11/17 주차별 목표 · 예상 그래프)</div>
+    <div class="muted sm">앱 버전 v29 (11/17 목표 범위·오늘 목표 표시)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
