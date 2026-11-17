@@ -609,9 +609,10 @@ function plan() {
   const f = d => !f0 || d < f0.d ? null : d >= goalDate ? gf : f0.f + (gf - f0.f) * diffDays(d, f0.d) / Math.max(1, diffDays(goalDate, f0.d));
   return { s0, w0, goal, rate, goalDate, gf, f0, w, f };
 }
-const planWeek = (P, d) => Math.floor(diffDays(d, P.s0) / 7) + 1;
+// 주차는 월~일 기준. 1주 차 = 시작일이 속한 주(시작일 이전 날은 제외)
+const planWeek = (P, d) => Math.floor(diffDays(weekStart(d), weekStart(P.s0)) / 7) + 1;
 // 주차 k의 [시작, 끝] 날짜
-const planWeekRange = (P, k) => [addDays(P.s0, (k - 1) * 7), addDays(P.s0, k * 7 - 1)];
+const planWeekRange = (P, k) => { const a = addDays(weekStart(P.s0), (k - 1) * 7); return [a < P.s0 ? P.s0 : a, addDays(a, 6)]; };
 // 실제 vs 계획: 기록이 있는 날만 비교
 function planCompare(P, a, b, metric = 'w') {
   const val = metric === 'w' ? weightOn : fatOn, pf = metric === 'w' ? P.w : P.f, A = [], B = [];
@@ -629,12 +630,12 @@ function actualEta(P) {
 }
 function vGoalCard(d) {
   const P = plan(); if (d < P.s0) return '';
-  const k = planWeek(P, d), [a, b] = planWeekRange(P, k), tgtW = P.w(b), tgtF = P.f(b), cw = planCompare(P, a, b), st = planStatus(cw && cw.diff), lf = latestFat(d), E = actualEta(P);
+  const k = planWeek(P, d), [a, b] = planWeekRange(P, k), tgtW = P.w(b), tgtF = P.f(b), cw0 = planCompare(P, a, b), roll = !cw0 || cw0.n < 3, cw = roll ? planCompare(P, addDays(d, -6), d) : cw0, st = planStatus(cw && cw.diff), lf = latestFat(d), E = actualEta(P);
   const total = Math.max(1, planWeek(P, P.goalDate));
   return `<div class="card col goalcard">
     <div class="between"><b>${k}주 차 목표 <span class="muted sm">${md(a)}–${md(b)}</span></b>${st ? `<span class="pill ${st.c === 'acc' ? '' : 'warnpill'}">${st.t}</span>` : ''}</div>
     <div class="grid2 g6">
-      <div class="col g2"><span class="muted sm">주말 목표 체중</span><b class="lg">${r1(tgtW)}<small class="muted"> kg</small></b><span class="sm ${cw ? (cw.diff > 0.3 ? 'warnt' : 'acc') : 'muted'}">${cw ? `이번 주 평균 ${r1(cw.act)} (${cw.diff > 0 ? '+' : ''}${r1(cw.diff)})` : '이번 주 체중 기록 없음'}</span></div>
+      <div class="col g2"><span class="muted sm">주말 목표 체중</span><b class="lg">${r1(tgtW)}<small class="muted"> kg</small></b><span class="sm ${cw ? (cw.diff > 0.3 ? 'warnt' : 'acc') : 'muted'}">${cw ? `${roll ? '최근 7일' : '이번 주'} 평균 ${r1(cw.act)} (목표 대비 ${Math.abs(cw.diff) < 0.05 ? '±0' : (cw.diff > 0 ? '+' : '') + r1(cw.diff)})` : '체중 기록 없음'}</span></div>
       <div class="col g2"><span class="muted sm">주말 목표 체지방률</span><b class="lg">${tgtF != null ? r1(tgtF) : '–'}<small class="muted"> %</small></b><span class="sm muted">${lf ? `최근 ${r1(lf.f)}%` : '기록 없음'}</span></div>
     </div>
     <div class="bar"><i style="width:${Math.min(100, k / total * 100)}%"></i></div>
@@ -644,7 +645,7 @@ function vGoalCard(d) {
 function vPlanTable() {
   const P = plan(), cur = planWeek(P, today()), last = Math.max(cur, planWeek(P, P.goalDate));
   const rows = []; for (let k = 1; k <= last; k++) { const [a, b] = planWeekRange(P, k), c = k <= cur ? planCompare(P, a, b) : null, st = c && planStatus(c.diff), ft = P.f(b);
-    rows.push(`<tr class="${k === cur ? 'cur' : ''}"><td>${k}주<small>${md(a)}~</small></td><td>${r1(P.w(b))}</td><td>${ft != null ? r1(ft) : '–'}</td><td>${c ? r1(c.act) : '–'}</td><td class="${st ? st.c : 'muted'}">${st ? (c.diff > 0 ? '+' : '') + r1(c.diff) : k > cur ? '예정' : '–'}</td></tr>`); }
+    rows.push(`<tr class="${k === cur ? 'cur' : ''}"><td>${k}주<small>${md(a)}~</small></td><td>${r1(P.w(b))}</td><td>${ft != null ? r1(ft) : '–'}</td><td>${c ? r1(c.act) : '–'}</td><td class="${st ? st.c : 'muted'}">${st ? (Math.abs(c.diff) < 0.05 ? '±0' : (c.diff > 0 ? '+' : '') + r1(c.diff)) + (k === cur && c.n < 7 ? `<small>${c.n}일</small>` : '') : k > cur ? '예정' : '–'}</td></tr>`); }
   return `<div class="card col">
     <div class="between"><b>주차별 목표 (예상)</b><span class="muted sm">주 ${P.rate}kg 감량 기준</span></div>
     <div class="ptable"><table><thead><tr><th>주차</th><th>목표 kg</th><th>목표 %</th><th>실제 평균</th><th>차이</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
@@ -807,7 +808,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v29 (11/17 목표 범위·오늘 목표 표시)</div>
+    <div class="muted sm">앱 버전 v30 (11/17 목표 주차 월요일 시작)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
