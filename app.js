@@ -599,6 +599,14 @@ function vFood() {
 /* ---------- 목표 계획 (예상 체중·체지방률) ---------- */
 // 시작 체중 = 시작일부터 7일 안의 첫 체중(없으면 79). 주 rate kg씩 goalW까지 직선 감량.
 // 체지방률 = 첫 기록 → 체중 목표 도달일에 goalFat%까지 직선.
+// 과거 감량 기록(2023) — 과거 시작일을 올해 시작일에 맞춰 같은 'Day'끼리 비교
+function past() {
+  const h = S.docs.past2023; if (!h || !h.w) return null; const st = settings(), ps = st.pastStart || h.start, off = diffDays(st.planStart, ps);
+  const at = (d, F) => { const v = (F ? h.f : h.w)[addDays(d, -off)]; return v == null ? null : +v; };
+  const near = (d, F, n = 3) => { const v = []; for (let i = -n; i <= n; i++) { const x = at(addDays(d, i), F); if (x != null) v.push(x); } return avgOf(v); };
+  const first = F => { const o = F ? h.f : h.w, k = Object.keys(o).sort().find(x => x >= ps); return k ? { d: k, v: +o[k] } : null; };
+  return { h, ps, off, at, near, first, label: h.label || '과거', pdate: d => addDays(d, -off) };
+}
 function plan() {
   const st = settings(), s0 = st.planStart, rate = Math.max(0.1, +st.rate || 0.6), goal = +st.goalW || 70;
   let w0 = null; for (let i = 0; i < 7 && w0 == null; i++) w0 = weightOn(addDays(s0, i)); if (w0 == null) w0 = START_WEIGHT;
@@ -680,37 +688,37 @@ const avgOf = a => { const v = a.filter(x => x != null); return v.length ? v.red
 function ymdLong(d) { const t = parseD(d); return `${t.getFullYear()}년 ${t.getMonth() + 1}월 ${t.getDate()}일`; }
 function rangeText(a, b) { if (a === b) return ymdLong(a); const A = parseD(a), B = parseD(b); return `${ymdLong(a)}~${A.getFullYear() !== B.getFullYear() ? ymdLong(b) : A.getMonth() !== B.getMonth() ? `${B.getMonth() + 1}월 ${B.getDate()}일` : `${B.getDate()}일`}`; }
 // 범위별 점 목록: {w, label(축), tip(선택 시 표시), tick(축 라벨 표시 여부)}
-function wSeries(r, end, val = weightOn, pv = () => null) {
+function wSeries(r, end, val = weightOn, pv = () => null, ph = () => null) {
   const out = [];
   if (r === 'plan') { // 시작 주부터 목표 도달 주까지 주 단위: 실제 = 주 평균, 목표 = 주 마지막 날 계획값
     const P = plan(), last = Math.max(planWeek(P, end), planWeek(P, P.goalDate) + 1);
     for (let k = 1; k <= last; k++) { const [a, b] = planWeekRange(P, k), days = []; for (let d = a; d <= b && d <= end; d = addDays(d, 1)) days.push(d);
-      out.push({ w: avgOf(days.map(val)), pl: pv(b), label: `${k}주`, sub: md(a), tip: `${k}주 차 (${md(a)}~${md(b)}) 평균 · 목표 ${pv(b) != null ? r1(pv(b)) : '–'}`, tick: k === 1 || k === last || (k % 3 === 1 && last - k >= 2) }); }
+      out.push({ w: avgOf(days.map(val)), pl: pv(b), ph: avgOf([...Array(7)].map((_, i) => ph(addDays(a, i)))), label: `${k}주`, sub: md(a), tip: `${k}주 차 (${md(a)}~${md(b)}) 평균 · 목표 ${pv(b) != null ? r1(pv(b)) : '–'}`, tick: k === 1 || k === last || (k % 3 === 1 && last - k >= 2) }); }
     return { pts: out, start: P.s0 };
   }
-  if (r === 'd') { out.push({ w: val(end), pl: pv(end), label: mdw(end), tip: ymdLong(end), tick: true }); return { pts: out, start: end }; }
+  if (r === 'd') { out.push({ w: val(end), pl: pv(end), ph: ph(end), label: mdw(end), tip: ymdLong(end), tick: true }); return { pts: out, start: end }; }
   if (r === 'w' || r === 'm') {
     const n = r === 'w' ? 7 : 30, start = addDays(end, -(n - 1));
-    for (let i = 0; i < n; i++) { const d = addDays(start, i); out.push({ w: val(d), pl: pv(d), label: md(d), sub: DOW[parseD(d).getDay()], tip: ymdLong(d), tick: r === 'w' || (n - 1 - i) % 7 === 0 }); }
+    for (let i = 0; i < n; i++) { const d = addDays(start, i); out.push({ w: val(d), pl: pv(d), ph: ph(d), label: md(d), sub: DOW[parseD(d).getDay()], tip: ymdLong(d), tick: r === 'w' || (n - 1 - i) % 7 === 0 }); }
     return { pts: out, start };
   }
   if (r === '6m') {
     const start = weekStart(addDays(end, -7 * 25));
     for (let k = 0; k < 26; k++) { const ws = addDays(start, 7 * k), days = [...Array(7)].map((_, i) => addDays(ws, i)).filter(d => d <= end); const prev = k ? parseD(addDays(ws, -7)).getMonth() : -1, m = parseD(ws).getMonth();
-      out.push({ w: avgOf(days.map(val)), pl: avgOf(days.map(pv)), label: `${m + 1}월`, tip: `${md(ws)}~${md(days[days.length - 1])} 주 평균`, tick: m !== prev }); }
+      out.push({ w: avgOf(days.map(val)), pl: avgOf(days.map(pv)), ph: avgOf([...Array(7)].map((_, i) => ph(addDays(ws, i)))), label: `${m + 1}월`, tip: `${md(ws)}~${md(days[days.length - 1])} 주 평균`, tick: m !== prev }); }
     return { pts: out, start };
   }
   const E = parseD(end), first = new Date(E.getFullYear(), E.getMonth() - 11, 1);
   for (let k = 0; k < 12; k++) { const m0 = new Date(first.getFullYear(), first.getMonth() + k, 1), dim = new Date(m0.getFullYear(), m0.getMonth() + 1, 0).getDate(), vals = [];
-    const pls = []; for (let i = 1; i <= dim; i++) { const d = `${m0.getFullYear()}-${pad(m0.getMonth() + 1)}-${pad(i)}`; pls.push(pv(d)); if (d > end) continue; vals.push(val(d)); }
-    out.push({ w: avgOf(vals), pl: avgOf(pls), label: `${m0.getMonth() + 1}월`, tip: `${m0.getFullYear()}년 ${m0.getMonth() + 1}월 평균`, tick: true }); }
+    const pls = [], phs = []; for (let i = 1; i <= dim; i++) { const d = `${m0.getFullYear()}-${pad(m0.getMonth() + 1)}-${pad(i)}`; pls.push(pv(d)); phs.push(ph(d)); if (d > end) continue; vals.push(val(d)); }
+    out.push({ w: avgOf(vals), pl: avgOf(pls), ph: avgOf(phs), label: `${m0.getMonth() + 1}월`, tip: `${m0.getFullYear()}년 ${m0.getMonth() + 1}월 평균`, tick: true }); }
   return { pts: out, start: `${first.getFullYear()}-${pad(first.getMonth() + 1)}-01` };
 }
 function vWeightCard() {
-  const r = S.wRange || 'w', F = S.wMetric === 'fat', val = F ? fatOn : weightOn, U = F ? '%' : 'kg', P = plan(), pv = F ? P.f : P.w;
+  const r = S.wRange || 'w', F = S.wMetric === 'fat', val = F ? fatOn : weightOn, U = F ? '%' : 'kg', P = plan(), pv = F ? P.f : P.w, H = past(), showH = H && S.cmpPast !== false, ph = showH ? (d => H.at(d, F)) : () => null;
   // 1개월 이상은 목표일까지 미래 구간도 보여 줌 (예상선)
   const end = today();
-  const { pts, start } = wSeries(r, end, val, pv);
+  const { pts, start } = wSeries(r, end, val, pv, ph);
   const cmpP = planCompare(P, addDays(today(), -6), today(), F ? 'f' : 'w'), stP = planStatus(cmpP && cmpP.diff, F ? 'f' : 'w');
   const vals = pts.map(p => p.w), avg = avgOf(vals), lw = latestWeight(end), lf = latestFat(end);
   // 직전 같은 길이 기간과 비교
@@ -723,28 +731,41 @@ function vWeightCard() {
   const big = sel ? sel.w : avg, diff = !sel && base != null && prev != null ? base - prev : null;
   const what = r === 'plan' ? '평균 (점 = 주 평균)' : r === 'd' ? '오늘' : r === '6m' ? '평균 (점 = 주 평균)' : r === 'y' ? '평균 (점 = 월 평균)' : '평균';
   return `<div class="card col wcard">
-    <div class="row g6"><button class="chipbtn ${F ? '' : 'on'}" data-act="wMetric" data-v="w">체중</button><button class="chipbtn ${F ? 'on' : ''}" data-act="wMetric" data-v="fat">체지방률</button></div>
+    <div class="between"><div class="row g6"><button class="chipbtn ${F ? '' : 'on'}" data-act="wMetric" data-v="w">체중</button><button class="chipbtn ${F ? 'on' : ''}" data-act="wMetric" data-v="fat">체지방률</button></div>${H ? `<button class="chipbtn ${showH ? 'on past' : ''}" data-act="cmpPast">${esc(H.label)} 비교</button>` : ''}</div>
     <div class="seg sm">${W_RANGES.map(([k, l]) => `<button class="${k === r ? 'on' : ''}" data-act="wRange" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="col g2">
       <span class="muted sm">${sel ? '선택한 기록' : what}</span>
       <div class="huge">${big != null ? (r === 'd' || sel ? r2(big) : r1(big)) : '–'}<small> ${U}</small></div>
-      <span class="muted sm">${sel ? sel.tip : rangeText(start, end)}</span>
+      <span class="muted sm">${sel ? sel.tip + (sel.ph != null ? ` · ${esc(H.label)} ${r1(sel.ph)}${U}` : '') : rangeText(start, end)}</span>
     </div>
     ${(() => { const td = pv(today()), tv = val(today()), lv = (F ? latestFat(today()) : latestWeight(today())); if (td == null || r === 'plan') return '';
       const cur = tv != null ? tv : lv ? (F ? lv.f : lv.w) : null, tol = F ? 0.5 : 0.3, wk = cmpP;
       return `<div class="plansum sm"><div><span class="muted">오늘 목표</span><b>${r1(td)}${U}</b><span class="muted">허용 ${r1(td - tol)}~${r1(td + tol)}</span></div><div><span class="muted">${tv != null ? '오늘 측정' : '최근 측정'}</span><b>${cur != null ? r1(cur) + U : '–'}</b>${cur != null ? `<span class="${cur - td > tol ? 'warnt' : 'acc'}">${cur - td > 0 ? '+' : ''}${r1(cur - td)}</span>` : ''}</div><div><span class="muted">7일 평균 판정</span><b class="${wk ? stP.c : ''}">${wk ? stP.t : '–'}</b>${wk ? `<span class="muted">목표 대비 ${Math.abs(wk.diff) < 0.05 ? '±0' : (wk.diff > 0 ? '+' : '') + r1(wk.diff)}</span>` : ''}</div></div>`; })()}
     ${wChart(pts, r, F ? 0.5 : 0.3, U)}
-    <div class="legend sm"><span><i class="lg-act"></i>실제</span><span><i class="lg-plan"></i>목표(예상)</span><span><i class="lg-band"></i>목표 범위 ±${F ? '0.5%p' : '0.3kg'}</span></div>
+    <div class="legend sm"><span><i class="lg-act"></i>실제</span><span><i class="lg-plan"></i>목표(예상)</span><span><i class="lg-band"></i>목표 범위 ±${F ? '0.5%p' : '0.3kg'}</span>${showH ? `<span><i class="lg-past"></i>${esc(H.label)} (같은 Day)</span>` : ''}</div>
+    ${showH ? vPastCmp(P, H, F) : ''}
     <span class="muted sm">하루 체중은 수분·식사로 ±0.5kg 출렁여요. 하루 값보다 <b>7일 평균이 회색 범위 안</b>에 있는지로 판단하세요.</span>
     <div class="wfoot sm">${diff != null ? `<span class="b ${diff <= 0 ? 'acc' : 'warnt'}">${cmpLabel} ${diff > 0 ? '+' : ''}${r1(diff)}${F ? '%p' : 'kg'}</span>` : `<span class="muted">${cmpLabel}: 비교할 기록 없음</span>`}${F ? (lf ? `<span class="muted">표준 22%까지 ${r1(Math.max(0, lf.f - 22))}%p</span>` : '') : (lw ? `<span class="muted">목표 70kg까지 ${r1(Math.max(0, lw.w - 70))}kg</span>` : '')}</div>
     <span class="muted sm">점을 누르면 그날(그 기간) 값이 위에 표시됩니다.</span>
   </div>`;
 }
+function vPastCmp(P, H, F) {
+  const t = today(), n = diffDays(t, P.s0) + 1, U = F ? '%p' : 'kg';
+  const nowAvg = avgOf([...Array(7)].map((_, i) => (F ? fatOn : weightOn)(addDays(t, -i)))), now0 = F ? (P.f0 && P.f0.f) : P.w0;
+  const p0 = H.first(F), pNow = H.near(addDays(t, -3), F, 3);
+  if (nowAvg == null || now0 == null || !p0 || pNow == null) return '';
+  const dNow = nowAvg - now0, dPast = pNow - p0.v, gap = dNow - dPast;
+  const p100 = H.near(addDays(P.s0, 99), F, 3);
+  return `<div class="pastcmp sm"><div class="between"><b>Day ${n} 비교</b><span class="muted">${esc(H.label)} 같은 시점: ${md(H.pdate(t))}</span></div>
+    <div class="grid2 g6"><div class="col"><span class="muted">올해 시작 대비 (7일 평균)</span><b>${dNow > 0 ? '+' : ''}${r1(dNow)}${U}</b></div><div class="col"><span class="muted">${esc(H.label)} 시작 대비</span><b class="pastt">${dPast > 0 ? '+' : ''}${r1(dPast)}${U}</b></div></div>
+    <span class="${gap <= 0.05 ? 'acc' : 'warnt'} b">${Math.abs(gap) < 0.1 ? `${esc(H.label)}와 같은 속도입니다` : gap < 0 ? `${esc(H.label)}보다 ${r1(-gap)}${U} 더 빠릅니다` : `${esc(H.label)}보다 ${r1(gap)}${U} 덜 빠졌습니다`}</span>
+    ${p100 != null ? `<span class="muted">${esc(H.label)}엔 Day 100 무렵 ${r1(p100)}${F ? '%' : 'kg'}(시작 대비 ${r1(p100 - p0.v)}${U})까지 갔습니다.</span>` : ''}</div>`;
+}
 function niceStep(span) { return [0.5, 1, 2, 5, 10].find(s => span / s <= 4) || 10; }
 function wChart(pts, r, tol = 0.3, unit = 'kg') {
-  const ys = pts.map(p => p.w).filter(v => v != null), ps = pts.map(p => p.pl).filter(v => v != null);
+  const ys = pts.map(p => p.w).filter(v => v != null), ps = pts.map(p => p.pl).filter(v => v != null), hs = pts.map(p => p.ph).filter(v => v != null);
   if (!ys.length && !ps.length) return '<div class="muted sm pad">이 기간에는 기록이 없습니다.</div>';
-  let mn = Math.min(...ys, ...ps.map(v => v - tol)), mx = Math.max(...ys, ...ps.map(v => v + tol)); if (mx - mn < 1) { mn -= .6; mx += .6; }
+  let mn = Math.min(...ys, ...hs, ...ps.map(v => v - tol)), mx = Math.max(...ys, ...hs, ...ps.map(v => v + tol)); if (mx - mn < 1) { mn -= .6; mx += .6; }
   const step = niceStep(mx - mn), lo = Math.floor(mn / step) * step, hi = Math.ceil(mx / step) * step;
   const W = 340, H = 190, L = 4, R = 36, T = 10, B = r === 'w' || r === 'm' || r === 'plan' ? 34 : 22, n = pts.length;
   const X = i => n === 1 ? (L + W - R) / 2 : L + 8 + i / (n - 1) * (W - R - L - 16), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
@@ -752,12 +773,14 @@ function wChart(pts, r, tol = 0.3, unit = 'kg') {
   const bi = pts.map((p, i) => p.pl != null ? i : null).filter(i => i != null);
   const band = bi.length > 1 ? `<polygon points="${bi.map(i => `${X(i).toFixed(1)},${Y(pts[i].pl + tol).toFixed(1)}`).join(' ')} ${bi.slice().reverse().map(i => `${X(i).toFixed(1)},${Y(pts[i].pl - tol).toFixed(1)}`).join(' ')}" class="pband"/>` : '';
   const li = bi.length ? bi[bi.length - 1] : null, lt = li != null && r !== 'plan' ? `<text x="${X(li) - 4}" y="${Y(pts[li].pl) + (pts[li].w != null && pts[li].w < pts[li].pl ? -10 : 16)}" class="pltxt" text-anchor="end">목표 ${r1(pts[li].pl)}</text>` : '';
+  const hline = pts.map((p, i) => p.ph != null ? `${X(i).toFixed(1)},${Y(p.ph).toFixed(1)}` : null).filter(Boolean);
   const pline = pts.map((p, i) => p.pl != null ? `${X(i).toFixed(1)},${Y(p.pl).toFixed(1)}` : null).filter(Boolean);
   const line = pts.map((p, i) => p.w != null ? `${X(i).toFixed(1)},${Y(p.w).toFixed(1)}` : null).filter(Boolean);
   return `<svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="체중 그래프">
     ${grid.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="gl"/><text x="${W - R + 6}" y="${Y(v) + 4}" class="yl">${step < 1 ? v.toFixed(1) : v}</text>`).join('')}
     ${pts.map((p, i) => p.tick ? `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${H - B}" class="vl"/><text x="${X(i)}" y="${H - B + 14}" class="xl">${p.label}</text>${p.sub ? `<text x="${X(i)}" y="${H - B + 27}" class="xl">(${p.sub})</text>` : ''}` : '').join('')}
     ${band}
+    ${hline.length > 1 ? `<polyline points="${hline.join(' ')}" class="hl"/>` : ''}${pts.map((p, i) => p.ph != null ? `<circle cx="${X(i)}" cy="${Y(p.ph)}" r="2.6" class="hp"/>` : '').join('')}
     ${pline.length > 1 ? `<polyline points="${pline.join(' ')}" class="pll"/>` : pline.length === 1 ? `<circle cx="${pline[0].split(',')[0]}" cy="${pline[0].split(',')[1]}" r="3" class="plp"/>` : ''}
     ${line.length > 1 ? `<polyline points="${line.join(' ')}" class="wl"/>` : ''}
     ${lt}
@@ -782,6 +805,7 @@ function vSettings() {
       <label class="field"><span>목표 체중 kg</span><input type="number" step="0.5" data-setting="goalW" value="${st.goalW}"></label>
       <label class="field"><span>주당 감량 목표 kg</span><input type="number" step="0.1" data-setting="rate" value="${st.rate}"></label>
       <label class="field"><span>목표 체지방률 %</span><input type="number" step="0.5" data-setting="goalFat" value="${st.goalFat}"></label>
+      ${S.docs.past2023 ? `<label class="field"><span>과거 비교 시작일 (= 올해 시작일)</span><input type="date" data-setting-text="pastStart" value="${st.pastStart || S.docs.past2023.start}"></label>` : ''}
     </div>
   </div>
   <div class="card col">
@@ -808,7 +832,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v30 (11/17 목표 주차 월요일 시작)</div>
+    <div class="muted sm">앱 버전 v31 (11/18 2023년 감량 비교 · 설정 날짜칸)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -869,6 +893,7 @@ document.addEventListener('click', async ev => {
     case 'loadSplit': loadSplit(v); break;
     case 'wRange': S.wRange = v; S.wSel = null; render(); break;
     case 'runShortcut': { const n = (settings().scName || '').trim() || SC_NAME; S.scWait = Date.now(); location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(n); setTimeout(requestRender, 300); break; }
+    case 'cmpPast': S.cmpPast = S.cmpPast === false; render(); break;
     case 'wMetric': S.wMetric = v; S.wSel = null; render(); break;
     case 'wPt': S.wSel = S.wSel === +v ? null : +v; S._keepScroll = true; render(); break;
     case 'sessPause': sessUpdate((t, now) => { if (t.pa) { t.pt = (t.pt || 0) + (now - t.pa); t.pa = null; } else t.pa = now; }); break;
