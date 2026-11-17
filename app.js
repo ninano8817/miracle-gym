@@ -11,7 +11,7 @@ const MAIN_PARTS = ['가슴', '어깨', '등', '팔', '하체'];  // 11-11부터
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const START_WEIGHT = 79;
 const DEFAULT_SETTINGS = {
-  targets: { kcal: 2150, p: 150 }, bar: 10, rest: 90, planStart: '2026-11-05', gymOnly: true,
+  targets: { kcal: 2150, p: 150 }, bar: 10, rest: 90, planStart: '2026-11-05', gymOnly: true, goalW: 70, rate: 0.6, goalFat: 16,
   usual: {
     breakfast: [{ n: '플레인 베이글', k: 260, p: 10, c: 50, f: 2 }, { n: '크림치즈', k: 100, p: 2, c: 2, f: 10 }],
     post: [{ n: '프로틴 1스쿱', k: 120, p: 24, c: 3, f: 1.5 }],
@@ -304,6 +304,7 @@ function vHome() {
     : `<span class="row g6"><b class="lg">${lf ? `<span class="${h.fat != null ? '' : 'muted'}">${r1(lf.f)}</span>` : '<span class="muted">–</span>'}<small class="muted"> %</small></b>${lf && pf && pf.d !== lf.d ? `<span class="sm b ${lf.f <= pf.f ? 'acc' : 'warnt'}">${lf.f - pf.f > 0 ? '+' : ''}${r1(lf.f - pf.f)}%p</span>` : ''}<span class="muted sm">표준 17~22</span></span>`}
   </div>`; })()}
   ${d === today() ? `<button class="card tap row between syncbtn" data-act="runShortcut"><span class="row g6">${ic('sync', 18, 2.2)}<span class="col"><b>아이폰 건강 데이터 불러오기</b><span class="muted sm">${S.scWait ? '단축어 실행 후 돌아오면 반영돼요' : '체중 · 걸음 · 체지방을 지금 바로 반영'}</span></span></span>${ic('right', 18, 2.2)}</button>` : ''}
+  ${vGoalCard(d)}
   <div class="card col">
     <div class="between"><b>단백질</b><span class="muted sm">열량 ${r0(t.k).toLocaleString()} / ${st.targets.kcal.toLocaleString()}</span></div>
     <div class="huge">${r0(t.p)}<small> / ${st.targets.p}g</small></div>
@@ -595,6 +596,61 @@ function vFood() {
 }
 
 /* ---------- 리포트 ---------- */
+/* ---------- 목표 계획 (예상 체중·체지방률) ---------- */
+// 시작 체중 = 시작일부터 7일 안의 첫 체중(없으면 79). 주 rate kg씩 goalW까지 직선 감량.
+// 체지방률 = 첫 기록 → 체중 목표 도달일에 goalFat%까지 직선.
+function plan() {
+  const st = settings(), s0 = st.planStart, rate = Math.max(0.1, +st.rate || 0.6), goal = +st.goalW || 70;
+  let w0 = null; for (let i = 0; i < 7 && w0 == null; i++) w0 = weightOn(addDays(s0, i)); if (w0 == null) w0 = START_WEIGHT;
+  const days = Math.max(0, Math.ceil((w0 - goal) / rate * 7)), goalDate = addDays(s0, days);
+  let f0 = null; for (let i = 0; i < 120 && !f0; i++) { const d = addDays(s0, i); if (d > today()) break; const f = fatOn(d); if (f != null) f0 = { d, f }; }
+  const gf = +st.goalFat || 16;
+  const w = d => d < s0 ? null : Math.max(goal, w0 - rate * diffDays(d, s0) / 7);
+  const f = d => !f0 || d < f0.d ? null : d >= goalDate ? gf : f0.f + (gf - f0.f) * diffDays(d, f0.d) / Math.max(1, diffDays(goalDate, f0.d));
+  return { s0, w0, goal, rate, goalDate, gf, f0, w, f };
+}
+const planWeek = (P, d) => Math.floor(diffDays(d, P.s0) / 7) + 1;
+// 주차 k의 [시작, 끝] 날짜
+const planWeekRange = (P, k) => [addDays(P.s0, (k - 1) * 7), addDays(P.s0, k * 7 - 1)];
+// 실제 vs 계획: 기록이 있는 날만 비교
+function planCompare(P, a, b, metric = 'w') {
+  const val = metric === 'w' ? weightOn : fatOn, pf = metric === 'w' ? P.w : P.f, A = [], B = [];
+  for (let d = a; d <= b && d <= today(); d = addDays(d, 1)) { const v = val(d), q = pf(d); if (v != null && q != null) { A.push(v); B.push(q); } }
+  if (!A.length) return null; const act = avgOf(A), pl = avgOf(B); return { act, pl, diff: act - pl, n: A.length };
+}
+function planStatus(diff, metric = 'w') { const tol = metric === 'w' ? 0.3 : 0.5; return diff == null ? null : diff <= -tol ? { t: '계획보다 빠름', c: 'acc' } : diff <= tol ? { t: '계획대로', c: 'acc' } : { t: '계획보다 느림', c: 'warnt' }; }
+// 최근 14일 실제 속도(kg/주)로 목표 도달 예상일
+function actualEta(P) {
+  const a = planCompare(P, addDays(today(), -13), addDays(today(), -7)), b = planCompare(P, addDays(today(), -6), today());
+  let r = null; if (a && b) r = a.act - b.act; else { const c = planCompare(P, P.s0, today()); if (c) { const wk = Math.max(1, diffDays(today(), P.s0) / 7); r = (P.w0 - c.act) / wk; } }
+  const cur = b ? b.act : (latestWeight(today()) || {}).w;
+  if (r == null || cur == null || r < 0.05) return { r, eta: null };
+  return { r, eta: addDays(today(), Math.ceil((cur - P.goal) / r * 7)) };
+}
+function vGoalCard(d) {
+  const P = plan(); if (d < P.s0) return '';
+  const k = planWeek(P, d), [a, b] = planWeekRange(P, k), tgtW = P.w(b), tgtF = P.f(b), cw = planCompare(P, a, b), st = planStatus(cw && cw.diff), lf = latestFat(d), E = actualEta(P);
+  const total = Math.max(1, planWeek(P, P.goalDate));
+  return `<div class="card col goalcard">
+    <div class="between"><b>${k}주 차 목표 <span class="muted sm">${md(a)}–${md(b)}</span></b>${st ? `<span class="pill ${st.c === 'acc' ? '' : 'warnpill'}">${st.t}</span>` : ''}</div>
+    <div class="grid2 g6">
+      <div class="col g2"><span class="muted sm">주말 목표 체중</span><b class="lg">${r1(tgtW)}<small class="muted"> kg</small></b><span class="sm ${cw ? (cw.diff > 0.3 ? 'warnt' : 'acc') : 'muted'}">${cw ? `이번 주 평균 ${r1(cw.act)} (${cw.diff > 0 ? '+' : ''}${r1(cw.diff)})` : '이번 주 체중 기록 없음'}</span></div>
+      <div class="col g2"><span class="muted sm">주말 목표 체지방률</span><b class="lg">${tgtF != null ? r1(tgtF) : '–'}<small class="muted"> %</small></b><span class="sm muted">${lf ? `최근 ${r1(lf.f)}%` : '기록 없음'}</span></div>
+    </div>
+    <div class="bar"><i style="width:${Math.min(100, k / total * 100)}%"></i></div>
+    <span class="sm muted">목표 ${P.goal}kg · 계획 도달 ${md(P.goalDate)} (${total}주 차)${E.eta ? ` · 지금 속도(주 ${r1(E.r)}kg)면 ${md(E.eta)}` : ''}</span>
+  </div>`;
+}
+function vPlanTable() {
+  const P = plan(), cur = planWeek(P, today()), last = Math.max(cur, planWeek(P, P.goalDate));
+  const rows = []; for (let k = 1; k <= last; k++) { const [a, b] = planWeekRange(P, k), c = k <= cur ? planCompare(P, a, b) : null, st = c && planStatus(c.diff), ft = P.f(b);
+    rows.push(`<tr class="${k === cur ? 'cur' : ''}"><td>${k}주<small>${md(a)}~</small></td><td>${r1(P.w(b))}</td><td>${ft != null ? r1(ft) : '–'}</td><td>${c ? r1(c.act) : '–'}</td><td class="${st ? st.c : 'muted'}">${st ? (c.diff > 0 ? '+' : '') + r1(c.diff) : k > cur ? '예정' : '–'}</td></tr>`); }
+  return `<div class="card col">
+    <div class="between"><b>주차별 목표 (예상)</b><span class="muted sm">주 ${P.rate}kg 감량 기준</span></div>
+    <div class="ptable"><table><thead><tr><th>주차</th><th>목표 kg</th><th>목표 %</th><th>실제 평균</th><th>차이</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+    <span class="muted sm">목표는 각 주 마지막 날 기준입니다. 실제 평균은 그 주에 잰 날의 평균과 같은 날의 계획값을 비교합니다. 체지방률은 첫 측정(${P.f0 ? md(P.f0.d) + ' ' + r1(P.f0.f) + '%' : '없음'})에서 ${md(P.goalDate)} ${P.gf}%까지 직선으로 잡았습니다.</span>
+  </div>`;
+}
 function vReport() {
   const st = settings(), ws = S.reportWeek || weekStart(today()), we = addDays(ws, 6);
   const dots = [...Array(7)].map((_, i) => { const dd = addDays(ws, i), day = getDay(dd), meals = day.meals || []; if (!meals.length || dd > today()) return { cls: 'none', d: dd }; const pct = sumMeals(day).p / st.targets.p; return { cls: pct >= 1 ? 'g' : pct >= .7 ? 'y' : pct >= .3 ? 'o' : 'r', d: dd }; });
@@ -604,6 +660,7 @@ function vReport() {
   <header class="hdr"><h1>리포트</h1><div class="row g4"><button class="iconbtn" data-act="wprev" aria-label="이전 주">${ic('left', 16, 2.4)}</button><b class="sm">${md(ws)} – ${md(we)}</b><button class="iconbtn" data-act="wnext" aria-label="다음 주" ${we >= today() ? 'disabled' : ''}>${ic('right', 16, 2.4)}</button></div></header>
   <button class="card tap row between syncbtn" data-act="copyLog" data-v="14"><span class="col"><b>코치에게 보낼 기록 복사</b><span class="muted sm">최근 14일 체중·식단·운동을 텍스트로 복사 → 채팅에 붙여넣기</span></span>${ic('right', 18, 2.2)}</button>
   ${vWeightCard()}
+  ${vPlanTable()}
   <div class="card col">
     <div class="between"><b>단백질 ${st.targets.p}g 달성</b><span class="muted sm">${hit} / 7일</span></div>
     <div class="grid7">${dots.map(x => `<div class="col cc g4"><span class="pdot ${x.cls}"></span><span class="sm muted">${DOW[parseD(x.d).getDay()]}</span></div>`).join('')}</div>
@@ -616,42 +673,54 @@ function vReport() {
   </div></div>`;
 }
 /* ---------- 체중 그래프 (애플 건강 앱 방식: 1일·1주·1개월·6개월·1년) ---------- */
-const W_RANGES = [['d', '1일'], ['w', '1주'], ['m', '1개월'], ['6m', '6개월'], ['y', '1년']];
+const W_RANGES = [['d', '1일'], ['w', '1주'], ['m', '1개월'], ['6m', '6개월'], ['y', '1년'], ['plan', '목표까지']];
 const mdw = d => `${md(d)}(${DOW[parseD(d).getDay()]})`;
 const avgOf = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
 function ymdLong(d) { const t = parseD(d); return `${t.getFullYear()}년 ${t.getMonth() + 1}월 ${t.getDate()}일`; }
 function rangeText(a, b) { if (a === b) return ymdLong(a); const A = parseD(a), B = parseD(b); return `${ymdLong(a)}~${A.getFullYear() !== B.getFullYear() ? ymdLong(b) : A.getMonth() !== B.getMonth() ? `${B.getMonth() + 1}월 ${B.getDate()}일` : `${B.getDate()}일`}`; }
 // 범위별 점 목록: {w, label(축), tip(선택 시 표시), tick(축 라벨 표시 여부)}
-function wSeries(r, end, val = weightOn) {
+function wSeries(r, end, val = weightOn, pv = () => null) {
   const out = [];
-  if (r === 'd') { out.push({ w: val(end), label: mdw(end), tip: ymdLong(end), tick: true }); return { pts: out, start: end }; }
+  if (r === 'plan') { // 시작 주부터 목표 도달 주까지 주 단위: 실제 = 주 평균, 목표 = 주 마지막 날 계획값
+    const P = plan(), last = Math.max(planWeek(P, end), planWeek(P, P.goalDate) + 1);
+    for (let k = 1; k <= last; k++) { const [a, b] = planWeekRange(P, k), days = []; for (let d = a; d <= b && d <= end; d = addDays(d, 1)) days.push(d);
+      out.push({ w: avgOf(days.map(val)), pl: pv(b), label: `${k}주`, sub: md(a), tip: `${k}주 차 (${md(a)}~${md(b)}) 평균 · 목표 ${pv(b) != null ? r1(pv(b)) : '–'}`, tick: k === 1 || k === last || (k % 3 === 1 && last - k >= 2) }); }
+    return { pts: out, start: P.s0 };
+  }
+  if (r === 'd') { out.push({ w: val(end), pl: pv(end), label: mdw(end), tip: ymdLong(end), tick: true }); return { pts: out, start: end }; }
   if (r === 'w' || r === 'm') {
     const n = r === 'w' ? 7 : 30, start = addDays(end, -(n - 1));
-    for (let i = 0; i < n; i++) { const d = addDays(start, i); out.push({ w: val(d), label: md(d), sub: DOW[parseD(d).getDay()], tip: ymdLong(d), tick: r === 'w' || (n - 1 - i) % 7 === 0 }); }
+    for (let i = 0; i < n; i++) { const d = addDays(start, i); out.push({ w: val(d), pl: pv(d), label: md(d), sub: DOW[parseD(d).getDay()], tip: ymdLong(d), tick: r === 'w' || (n - 1 - i) % 7 === 0 }); }
     return { pts: out, start };
   }
   if (r === '6m') {
     const start = weekStart(addDays(end, -7 * 25));
     for (let k = 0; k < 26; k++) { const ws = addDays(start, 7 * k), days = [...Array(7)].map((_, i) => addDays(ws, i)).filter(d => d <= end); const prev = k ? parseD(addDays(ws, -7)).getMonth() : -1, m = parseD(ws).getMonth();
-      out.push({ w: avgOf(days.map(val)), label: `${m + 1}월`, tip: `${md(ws)}~${md(days[days.length - 1])} 주 평균`, tick: m !== prev }); }
+      out.push({ w: avgOf(days.map(val)), pl: avgOf(days.map(pv)), label: `${m + 1}월`, tip: `${md(ws)}~${md(days[days.length - 1])} 주 평균`, tick: m !== prev }); }
     return { pts: out, start };
   }
   const E = parseD(end), first = new Date(E.getFullYear(), E.getMonth() - 11, 1);
   for (let k = 0; k < 12; k++) { const m0 = new Date(first.getFullYear(), first.getMonth() + k, 1), dim = new Date(m0.getFullYear(), m0.getMonth() + 1, 0).getDate(), vals = [];
-    for (let i = 1; i <= dim; i++) { const d = `${m0.getFullYear()}-${pad(m0.getMonth() + 1)}-${pad(i)}`; if (d > end) break; vals.push(val(d)); }
-    out.push({ w: avgOf(vals), label: `${m0.getMonth() + 1}월`, tip: `${m0.getFullYear()}년 ${m0.getMonth() + 1}월 평균`, tick: true }); }
+    const pls = []; for (let i = 1; i <= dim; i++) { const d = `${m0.getFullYear()}-${pad(m0.getMonth() + 1)}-${pad(i)}`; pls.push(pv(d)); if (d > end) continue; vals.push(val(d)); }
+    out.push({ w: avgOf(vals), pl: avgOf(pls), label: `${m0.getMonth() + 1}월`, tip: `${m0.getFullYear()}년 ${m0.getMonth() + 1}월 평균`, tick: true }); }
   return { pts: out, start: `${first.getFullYear()}-${pad(first.getMonth() + 1)}-01` };
 }
 function vWeightCard() {
-  const r = S.wRange || 'w', end = today(), F = S.wMetric === 'fat', val = F ? fatOn : weightOn, U = F ? '%' : 'kg', { pts, start } = wSeries(r, end, val);
+  const r = S.wRange || 'w', F = S.wMetric === 'fat', val = F ? fatOn : weightOn, U = F ? '%' : 'kg', P = plan(), pv = F ? P.f : P.w;
+  // 1개월 이상은 목표일까지 미래 구간도 보여 줌 (예상선)
+  const end = today();
+  const { pts, start } = wSeries(r, end, val, pv);
+  const cmpP = planCompare(P, addDays(today(), -6), today(), F ? 'f' : 'w'), stP = planStatus(cmpP && cmpP.diff, F ? 'f' : 'w');
   const vals = pts.map(p => p.w), avg = avgOf(vals), lw = latestWeight(end), lf = latestFat(end);
   // 직전 같은 길이 기간과 비교
   let prev = null, cmpLabel = '';
-  if (r === 'd') { const y = F ? latestFat(addDays(end, -1)) : latestWeight(addDays(end, -1)); prev = y ? (F ? y.f : y.w) : null; cmpLabel = '직전 기록 대비'; }
+  if (r === 'plan') { prev = F ? (P.f0 ? P.f0.f : null) : P.w0; cmpLabel = '시작 대비 (최근 주)'; }
+  else if (r === 'd') { const y = F ? latestFat(addDays(end, -1)) : latestWeight(addDays(end, -1)); prev = y ? (F ? y.f : y.w) : null; cmpLabel = '직전 기록 대비'; }
   else { const len = Math.round((parseD(end) - parseD(start)) / 864e5) + 1, pe = addDays(start, -1), ps = addDays(pe, -(len - 1)); const pv = []; for (let d = ps; d <= pe; d = addDays(d, 1)) pv.push(val(d)); prev = avgOf(pv); cmpLabel = `이전 ${W_RANGES.find(x => x[0] === r)[1]} 대비`; }
   const sel = S.wSel != null && pts[S.wSel] && pts[S.wSel].w != null ? pts[S.wSel] : null;
-  const big = sel ? sel.w : avg, diff = !sel && avg != null && prev != null ? avg - prev : null;
-  const what = r === 'd' ? '오늘' : r === '6m' ? '평균 (점 = 주 평균)' : r === 'y' ? '평균 (점 = 월 평균)' : '평균';
+  const lastV = [...vals].reverse().find(v => v != null), base = r === 'plan' ? lastV : avg;
+  const big = sel ? sel.w : avg, diff = !sel && base != null && prev != null ? base - prev : null;
+  const what = r === 'plan' ? '평균 (점 = 주 평균)' : r === 'd' ? '오늘' : r === '6m' ? '평균 (점 = 주 평균)' : r === 'y' ? '평균 (점 = 월 평균)' : '평균';
   return `<div class="card col wcard">
     <div class="row g6"><button class="chipbtn ${F ? '' : 'on'}" data-act="wMetric" data-v="w">체중</button><button class="chipbtn ${F ? 'on' : ''}" data-act="wMetric" data-v="fat">체지방률</button></div>
     <div class="seg sm">${W_RANGES.map(([k, l]) => `<button class="${k === r ? 'on' : ''}" data-act="wRange" data-v="${k}">${l}</button>`).join('')}</div>
@@ -661,23 +730,26 @@ function vWeightCard() {
       <span class="muted sm">${sel ? sel.tip : rangeText(start, end)}</span>
     </div>
     ${wChart(pts, r)}
+    <div class="legend sm"><span><i class="lg-act"></i>실제</span><span><i class="lg-plan"></i>목표(예상)</span>${cmpP ? `<span class="${stP.c} b">최근 7일 목표 대비 ${Math.abs(cmpP.diff) < 0.05 ? '±0' : (cmpP.diff > 0 ? '+' : '') + r1(cmpP.diff)}${F ? '%p' : 'kg'} · ${stP.t}</span>` : ''}</div>
     <div class="wfoot sm">${diff != null ? `<span class="b ${diff <= 0 ? 'acc' : 'warnt'}">${cmpLabel} ${diff > 0 ? '+' : ''}${r1(diff)}${F ? '%p' : 'kg'}</span>` : `<span class="muted">${cmpLabel}: 비교할 기록 없음</span>`}${F ? (lf ? `<span class="muted">표준 22%까지 ${r1(Math.max(0, lf.f - 22))}%p</span>` : '') : (lw ? `<span class="muted">목표 70kg까지 ${r1(Math.max(0, lw.w - 70))}kg</span>` : '')}</div>
     <span class="muted sm">점을 누르면 그날(그 기간) 값이 위에 표시됩니다.</span>
   </div>`;
 }
 function niceStep(span) { return [0.5, 1, 2, 5, 10].find(s => span / s <= 4) || 10; }
 function wChart(pts, r) {
-  const ys = pts.map(p => p.w).filter(v => v != null);
-  if (!ys.length) return '<div class="muted sm pad">이 기간에는 기록이 없습니다.</div>';
-  let mn = Math.min(...ys), mx = Math.max(...ys); if (mx - mn < 1) { mn -= .6; mx += .6; }
+  const ys = pts.map(p => p.w).filter(v => v != null), ps = pts.map(p => p.pl).filter(v => v != null);
+  if (!ys.length && !ps.length) return '<div class="muted sm pad">이 기간에는 기록이 없습니다.</div>';
+  let mn = Math.min(...ys, ...ps), mx = Math.max(...ys, ...ps); if (mx - mn < 1) { mn -= .6; mx += .6; }
   const step = niceStep(mx - mn), lo = Math.floor(mn / step) * step, hi = Math.ceil(mx / step) * step;
-  const W = 340, H = 190, L = 4, R = 36, T = 10, B = r === 'w' || r === 'm' ? 34 : 22, n = pts.length;
+  const W = 340, H = 190, L = 4, R = 36, T = 10, B = r === 'w' || r === 'm' || r === 'plan' ? 34 : 22, n = pts.length;
   const X = i => n === 1 ? (L + W - R) / 2 : L + 8 + i / (n - 1) * (W - R - L - 16), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
   const grid = []; for (let v = lo; v <= hi + 1e-9; v += step) grid.push(v);
+  const pline = pts.map((p, i) => p.pl != null ? `${X(i).toFixed(1)},${Y(p.pl).toFixed(1)}` : null).filter(Boolean);
   const line = pts.map((p, i) => p.w != null ? `${X(i).toFixed(1)},${Y(p.w).toFixed(1)}` : null).filter(Boolean);
   return `<svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="체중 그래프">
     ${grid.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="gl"/><text x="${W - R + 6}" y="${Y(v) + 4}" class="yl">${step < 1 ? v.toFixed(1) : v}</text>`).join('')}
     ${pts.map((p, i) => p.tick ? `<line x1="${X(i)}" x2="${X(i)}" y1="${T}" y2="${H - B}" class="vl"/><text x="${X(i)}" y="${H - B + 14}" class="xl">${p.label}</text>${p.sub ? `<text x="${X(i)}" y="${H - B + 27}" class="xl">(${p.sub})</text>` : ''}` : '').join('')}
+    ${pline.length > 1 ? `<polyline points="${pline.join(' ')}" class="pll"/>` : pline.length === 1 ? `<circle cx="${pline[0].split(',')[0]}" cy="${pline[0].split(',')[1]}" r="3" class="plp"/>` : ''}
     ${line.length > 1 ? `<polyline points="${line.join(' ')}" class="wl"/>` : ''}
     ${pts.map((p, i) => p.w != null ? `<circle cx="${X(i)}" cy="${Y(p.w)}" r="${S.wSel === i ? 6 : 4.5}" class="wp${S.wSel === i ? ' on' : ''}"/><circle cx="${X(i)}" cy="${Y(p.w)}" r="14" fill="transparent" data-act="wPt" data-v="${i}"/>` : '').join('')}
   </svg>`;
@@ -697,6 +769,9 @@ function vSettings() {
       <label class="field"><span>바벨 바 무게 kg</span><input type="number" data-setting="bar" value="${st.bar}"></label>
       <label class="field"><span>휴식 타이머 초</span><input type="number" data-setting="rest" value="${st.rest}"></label>
       <label class="field"><span>100일 시작일</span><input type="date" data-setting="planStart" value="${st.planStart}"></label>
+      <label class="field"><span>목표 체중 kg</span><input type="number" step="0.5" data-setting="goalW" value="${st.goalW}"></label>
+      <label class="field"><span>주당 감량 목표 kg</span><input type="number" step="0.1" data-setting="rate" value="${st.rate}"></label>
+      <label class="field"><span>목표 체지방률 %</span><input type="number" step="0.5" data-setting="goalFat" value="${st.goalFat}"></label>
     </div>
   </div>
   <div class="card col">
@@ -723,7 +798,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v27 (11/16 하체 주 2회 루틴 추천)</div>
+    <div class="muted sm">앱 버전 v28 (11/17 주차별 목표 · 예상 그래프)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
