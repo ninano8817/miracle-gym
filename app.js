@@ -578,7 +578,9 @@ function vFood() {
   <div class="card col">
     <div class="between"><b>${SLOT_LABEL[slot]}</b><span class="muted sm">하루 ${r0(t.k)}kcal · 단백질 ${r0(t.p)}/${st.targets.p}g</span></div>
     ${items.map(m => `<div class="between"><span class="col"><span>${esc(m.n)}</span><span class="muted sm">${r0(m.k)}kcal · P${r1(m.p)}</span></span><button class="iconbtn sm" data-act="mealDel" data-v="${m.id}" aria-label="${esc(m.n)} 삭제">${ic('trash', 16)}</button></div>`).join('') || '<span class="muted sm">아직 기록이 없습니다.</span>'}
-    ${items.length ? `<button class="linkbtn" data-act="saveUsual">이 끼니를 '평소대로'로 저장</button>` : ''}
+    ${(() => { const u = (st.usual || {})[slot] || [], same = u.length && items.length === u.length && u.every((x, i) => items[i] && items[i].n === x.n);
+      return `${u.length && !same ? `<button class="usualbtn" data-act="usual" data-v="${slot}"><span class="col"><b>${items.length ? '평소대로 더하기' : '평소대로 불러오기'}</b><span class="muted sm">${esc(u.map(x => x.n).join(' + '))} · ${r0(u.reduce((a, x) => a + (+x.k || 0), 0))}kcal · P${r0(u.reduce((a, x) => a + (+x.p || 0), 0))}</span></span>${ic('right', 18, 2.2)}</button>` : ''}
+      ${items.length && !same ? `<button class="linkbtn" data-act="saveUsual">이 끼니를 '평소대로'로 저장${u.length ? ' (기존 것 바꾸기)' : ''}</button>` : same ? `<span class="muted sm">'평소대로' 저장된 구성과 같아요</span>` : ''}`; })()}
   </div>
   <label class="search">${ic('search', 18, 2.2)}<input id="foodQ" value="${esc(S.fq)}" placeholder="음식 검색 (예: 뼈해장, ㄷㅈㅉㄱ)" autocomplete="off" aria-label="음식 검색"></label>
   <div id="foodRes">${S.fq ? `<div class="list card">${res.map(({ f, m, similar }) => `<button class="lrow" data-act="cartAdd" data-v="${esc(f.n)}"><span class="col f1"><span>${hlName(f.n, m.hl)}${f.mine ? ' <span class="tag">내 음식</span>' : ''}${f.cafe ? ' <span class="tag">오늘 구내식당</span>' : ''}</span><span class="muted sm">${esc(f.u || '')} · ${r0(f.k)}kcal · P${r1(f.p)}${similar ? ' · 비슷한 음식' : ''}</span></span><span class="acc b sm">담기</span></button>`).join('') || '<div class="muted pad">결과가 없어요. 아래 "직접 입력"으로 추가하세요.</div>'}</div>` : `
@@ -832,7 +834,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v31 (11/18 2023년 감량 비교 · 설정 날짜칸)</div>
+    <div class="muted sm">앱 버전 v32 (11/19 식단 탭 '평소대로' 불러오기)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
