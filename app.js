@@ -11,7 +11,7 @@ const MAIN_PARTS = ['가슴', '어깨', '등', '팔', '하체'];  // 11-11부터
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const START_WEIGHT = 79;
 const DEFAULT_SETTINGS = {
-  targets: { kcal: 2150, p: 150 }, bar: 10, rest: 90, planStart: '2026-11-05', gymOnly: true, goalW: 70, rate: 0.6, goalFat: 16,
+  targets: { kcal: 2150, p: 150 }, bar: 10, rest: 90, restBig: 150, restSmall: 75, planStart: '2026-11-05', gymOnly: true, goalW: 70, rate: 0.6, goalFat: 16,
   usual: {
     breakfast: [{ n: '플레인 베이글', k: 260, p: 10, c: 50, f: 2 }, { n: '크림치즈', k: 100, p: 2, c: 2, f: 10 }],
     post: [{ n: '프로틴 1스쿱', k: 120, p: 24, c: 3, f: 1.5 }],
@@ -161,6 +161,8 @@ function latestFat(upto) { for (let i = 0; i < 30; i++) { const d = addDays(upto
 function avgWeight(end, days = 7) { const ws = []; for (let i = 0; i < days; i++) { const w = weightOn(addDays(end, -i)); if (w != null) ws.push(w); } return ws.length ? ws.reduce((a, b) => a + b) / ws.length : null; }
 function latestWeight(upto) { for (let i = 0; i < 30; i++) { const d = addDays(upto, -i); const w = weightOn(d); if (w != null) return { w, d }; } return null; }
 function setsDone(e) { return (e.sets || []).filter(s => s.done || (s.done === undefined && num(s.r))); }
+// 부위별 주간 목표 세트 (근비대 일반 권장 범위)
+const PART_TGT = { '가슴': [10, 20], '등': [10, 20], '하체': [10, 20], '어깨': [8, 16], '팔': [6, 12], '코어': [4, 10] };
 function weekParts(ws) {
   const out = Object.fromEntries(PARTS.map(p => [p, 0]));
   for (let i = 0; i < 7; i++) { (getDay(addDays(ws, i)).ex || []).forEach(e => { const p = exInfo(e.name).part; if (p in out) out[p] += setsDone(e).length; }); }
@@ -190,9 +192,17 @@ function suggest(name, before) {
     const low = Math.min(...sets.map(s => +s.w || 0)); const lowAll = sets.filter(s => (+s.w || 0) === low).every(s => (+s.r || 0) >= hi);
     return lowAll ? { w: Math.max(0, low - 5), r: lo, text: `지난번 모두 ${hi}회 → 보조 −5kg 추천`, up: true } : { w: low, r: hi, text: `보조 ${low}kg 유지 · 반복 수 늘리기`, up: false };
   }
+  const rirs = topSets.map(s => s.rir).filter(x => x != null), easy = rirs.length >= Math.min(2, topSets.length) && avgOf(rirs) >= 3, hard = rirs.length && Math.max(...rirs) === 0 && topSets.some(s => (+s.r || 0) < lo);
+  if (!allHit && easy) { const inc = type === 'dumbbell' ? 1 : type === 'barbell' || type === 'machine' || type === 'cable' ? 5 : 2.5; return { w: top + inc, r: lo, text: `지난번 여유 3회 이상 → ${fmtW(type, top + inc, barOf(info))} 추천`, up: true }; }
+  if (hard) return { w: top, r: lo, text: `지난번 한계까지 했어요 · ${fmtW(type, top, barOf(info))} 유지, ${lo}회부터 채우기`, up: false };
   if (allHit) { const inc = type === 'dumbbell' ? 1 : type === 'barbell' || type === 'machine' || type === 'cable' ? 5 : 2.5; return { w: top + inc, r: lo, text: `지난번 모두 ${hi}회 달성 → ${fmtW(type, top + inc, barOf(info))} 추천`, up: true }; }
   return { w: top, r: hi, text: `${fmtW(type, top, barOf(info))} 유지 · 모든 세트 ${hi}회 목표`, up: false };
 }
+// 복합 종목(여러 관절·큰 근육) = 긴 휴식, 고립 종목 = 짧은 휴식
+const COMPOUND = new Set(['벤치프레스', '인클라인 벤치프레스', '인클라인 덤벨 프레스', '덤벨 벤치프레스', '어시스트 딥스', '백스쿼트', '루마니안 데드리프트', '데드리프트', '불가리안 스플릿 스쿼트', '레그프레스', '워킹 런지', '바벨 로우', '원암 덤벨 로우', '시티드 케이블 로우', '랫풀다운', '어시스트 풀업', '풀업', '밀리터리 프레스', '스미스 숄더프레스', '덤벨 숄더프레스', '오버헤드프레스', '힙 쓰러스트', '스미스 스쿼트']);
+function isCompound(name) { const i = exInfo(name); return COMPOUND.has(name) || i.type === 'barbell' || i.type === 'smith'; }
+function restOf(name) { const st = settings(); return isCompound(name) ? (+st.restBig || 150) : (+st.restSmall || 75); }
+const fmtRest = s => s >= 60 ? `${Math.floor(s / 60)}:${pad(s % 60)}` : `${s}초`;
 function barOf(info) { return info && info.bar != null ? info.bar : settings().bar; }
 function fmtW(type, w, bar = settings().bar) { if (w == null) return ''; if (type === 'barbell') return `${r1(w)}kg(한쪽 ${r2((w - bar) / 2)})`; if (type === 'assist') return `보조 ${r1(w)}kg`; return `${r1(w)}kg`; }
 function fmtSet(type, s) { const w = +s.w || 0; if (type === 'body' || (!w && type !== 'assist')) return `${s.r ?? '-'}${type === 'time' ? '초' : '회'}`; return `${type === 'assist' ? '보조 ' : ''}${r1(w)}×${s.r ?? '-'}`; }
@@ -402,13 +412,13 @@ function exCard(e, i, d) {
     const shown = info.type === 'barbell' ? (s.w != null ? r2((s.w - bar) / 2) : '') : (s.w ?? '');
     const phW = info.type === 'barbell' ? (sg.w != null ? r2((sg.w - bar) / 2) : '') : (sg.w ?? '');
     return `<div class="setrow ${s.done ? 'done' : ''}">
-      <span class="sn">${j + 1}</span><span class="prev">${prev}</span>
+      <span class="sn">${j + 1}${s.done && s.rir != null ? `<button class="rirtag" data-act="rirClr" data-v="${i}:${j}" aria-label="여유 횟수 다시 선택">여유${s.rir >= 3 ? '3+' : s.rir}</button>` : ''}</span><span class="prev">${prev}</span>
       ${T.input ? `<label class="cell"><input type="number" inputmode="decimal" step="0.25" value="${shown}" placeholder="${phW}" data-set="${i}:${j}:w" aria-label="${j + 1}세트 ${T.input} kg">${info.type === 'barbell' ? `<small data-sum="${i}:${j}">${s.w != null ? '합 ' + r1(s.w) : ''}</small>` : ''}</label>` : `<span class="cell na">–</span>`}
       <label class="cell"><input type="number" inputmode="numeric" value="${s.r ?? ''}" placeholder="${sg.r ?? ''}" data-set="${i}:${j}:r" aria-label="${j + 1}세트 ${info.type === 'time' ? '초' : '회'}"></label>
-      <button class="chk ${s.done ? 'on' : ''}" data-act="setDone" data-v="${i}:${j}" aria-label="${j + 1}세트 완료">${ic('check', 18, 3)}</button></div>`;
+      <button class="chk ${s.done ? 'on' : ''}" data-act="setDone" data-v="${i}:${j}" aria-label="${j + 1}세트 완료">${ic('check', 18, 3)}</button></div>${s.done && s.rir == null && T.input ? `<div class="rirrow"><span class="sm muted">몇 회 더 할 수 있었나요?</span>${[0, 1, 2, 3].map(n => `<button class="chipbtn sm" data-act="rir" data-v="${i}:${j}:${n}">${n === 3 ? '3+' : n}</button>`).join('')}</div>` : ''}`;
   }).join('');
   return `<div class="card excard" data-ex="${i}">
-    <div class="between"><div class="row g6 grow"><button class="grip" aria-label="${esc(e.name)} 순서 옮기기 (끌기)">${ic('grip', 20, 2.4)}</button><div class="col"><b class="lg">${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''}</span></div></div>
+    <div class="between"><div class="row g6 grow"><button class="grip" aria-label="${esc(e.name)} 순서 옮기기 (끌기)">${ic('grip', 20, 2.4)}</button><div class="col"><b class="lg">${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''} · 휴식 ${fmtRest(restOf(e.name))}</span></div></div>
       <div class="row g4"><span class="pill">${doneN} / ${(e.sets || []).length}</span><button class="iconbtn sm round acc" data-act="guide" data-v="${esc(e.name)}" aria-label="${esc(e.name)} 자세 보기">${ic('info', 18)}</button></div></div>
     <div class="sethead"><span>세트</span><span>지난번</span><span>${T.input || ''}${T.input ? ' kg' : ''}</span><span>${info.type === 'time' ? '초' : '회'}</span><span></span></div>
     ${rows}
@@ -678,9 +688,11 @@ function vReport() {
     <div class="legend sm"><span><i class="pdot s g"></i>달성</span><span><i class="pdot s y"></i>70% 이상</span><span><i class="pdot s o"></i>30~70%</span><span><i class="pdot s r"></i>30% 미만</span><span><i class="pdot s none"></i>미기록</span></div>
   </div>
   <div class="card col">
-    <b>부위별 주간 세트</b>
-    <div class="partgrid sm">${PARTS.map(p => `<span>${p}</span><div class="mini light"><i class="${p === low && p !== '코어' ? 'warnbg' : ''}" style="width:${Math.max(3, parts[p] / maxP * 100)}%"></i></div><b class="right">${parts[p]}</b>`).join('')}</div>
-    ${parts[top] > 0 && parts[low] < parts[top] / 2 ? `<div class="note">${low} 세트가 ${top}의 절반 이하입니다. 다음 운동은 ${low} 종목부터 시작해 보세요.</div>` : ''}
+    <div class="between"><b>부위별 주간 세트</b><span class="muted sm">회색 칸 = 목표 범위</span></div>
+    <div class="partgrid sm">${PARTS.map(p => { const [a, b] = PART_TGT[p] || [10, 20], v = parts[p], M = 24, cls = v < a ? 'warnbg' : v > b ? 'overbg' : '';
+      return `<span>${p}</span><div class="mini light tgt"><em style="left:${a / M * 100}%;width:${(b - a) / M * 100}%"></em><i class="${cls}" style="width:${Math.max(3, Math.min(100, v / M * 100))}%"></i></div><b class="right ${v < a ? 'warnt' : v > b ? 'overt' : 'acc'}">${v}<small class="muted">/${a}~${b}</small></b>`; }).join('')}</div>
+    ${(() => { const lack = PARTS.filter(p => parts[p] < PART_TGT[p][0]), over = PARTS.filter(p => parts[p] > PART_TGT[p][1]); if (!lack.length && !over.length) return '<div class="note ok">모든 부위가 목표 범위 안입니다.</div>';
+      const cur = ws === weekStart(today()); return `<div class="note">${lack.length ? `${cur ? '이번 주 남은 목표' : '부족'}: ${lack.map(p => `${p} ${PART_TGT[p][0] - parts[p]}세트`).join(', ')}. ` : ''}${over.length ? `많음: ${over.join(', ')} — 세트를 줄이고 부족한 부위로 옮기세요.` : ''}</div>`; })()}
   </div></div>`;
 }
 /* ---------- 체중 그래프 (애플 건강 앱 방식: 1일·1주·1개월·6개월·1년) ---------- */
@@ -802,7 +814,8 @@ function vSettings() {
       <label class="field"><span>열량 kcal</span><input type="number" data-setting="targets.kcal" value="${st.targets.kcal}"></label>
       <label class="field"><span>단백질 g</span><input type="number" data-setting="targets.p" value="${st.targets.p}"></label>
       <label class="field"><span>바벨 바 무게 kg</span><input type="number" data-setting="bar" value="${st.bar}"></label>
-      <label class="field"><span>휴식 타이머 초</span><input type="number" data-setting="rest" value="${st.rest}"></label>
+      <label class="field"><span>휴식 · 복합 종목 초</span><input type="number" data-setting="restBig" value="${st.restBig}"></label>
+      <label class="field"><span>휴식 · 고립 종목 초</span><input type="number" data-setting="restSmall" value="${st.restSmall}"></label>
       <label class="field"><span>100일 시작일</span><input type="date" data-setting="planStart" value="${st.planStart}"></label>
       <label class="field"><span>목표 체중 kg</span><input type="number" step="0.5" data-setting="goalW" value="${st.goalW}"></label>
       <label class="field"><span>주당 감량 목표 kg</span><input type="number" step="0.1" data-setting="rate" value="${st.rate}"></label>
@@ -834,7 +847,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v32 (11/19 식단 탭 '평소대로' 불러오기)</div>
+    <div class="muted sm">앱 버전 v33 (11/19 종목별 휴식 · 부위 목표 세트 · 여유 횟수)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -923,8 +936,10 @@ document.addEventListener('click', async ev => {
     case 'setDone': {
       const [i, j] = v.split(':').map(Number); let started = false;
       mutateDay(S.sel, d => { const e = d.ex[i], s = e.sets[j], sg = suggest(e.name, S.sel); s.done = !s.done; if (s.done) { if (s.r == null) s.r = sg.r; if (s.w == null && sg.w != null) s.w = sg.w; s.t = Date.now(); started = true; } });
-      if (started && S.sel === today()) startTimer(settings().rest); break;
+      if (started && S.sel === today()) { const nm = getDay(S.sel).ex[i].name; startTimer(restOf(nm)); } break;
     }
+    case 'rir': { const [i, j, n] = v.split(':').map(Number); mutateDay(S.sel, d => { d.ex[i].sets[j].rir = n; }); break; }
+    case 'rirClr': { const [i, j] = v.split(':').map(Number); mutateDay(S.sel, d => { delete d.ex[i].sets[j].rir; }); break; }
     case 'setAdd': mutateDay(S.sel, d => { const e = d.ex[+v], l = e.sets[e.sets.length - 1]; e.sets.push({ w: l ? l.w : null, r: null }); }); break;
     case 'setDel': mutateDay(S.sel, d => { const e = d.ex[+v]; if (e.sets.length > 1) e.sets.pop(); }); break;
     case 'exDel': if (confirmBox(el, '이 종목을 삭제할까요?')) mutateDay(S.sel, d => { d.ex.splice(+v, 1); }); break;
