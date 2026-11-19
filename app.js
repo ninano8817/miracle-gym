@@ -372,7 +372,7 @@ function vSplit(d) {
   return `<div class="card col">
     <div class="between"><b>오늘은 ${next.name} 차례</b><span class="muted sm">${last ? `지난번 ${md(last.date)} ${last.sp.name}` : '3분할 시작'} · 이번 주 하체 ${legWeek}/2</span></div>
     <span class="sm">${next.name} ${next.sub}</span>
-    <span class="muted sm">${next.ex.join(' · ')}</span>
+    <span class="muted sm">${next.ex.map(n => `${n} ${(next.sets || {})[n] || 3}세트`).join(' · ')} <b class="acc">· 총 ${next.ex.reduce((a, n) => a + ((next.sets || {})[n] || 3), 0)}세트</b></span>
     <button class="btn pri" data-act="loadSplit" data-v="${next.id}">${next.name} 루틴 불러오기</button>
     <div class="row g6 sm"><span class="muted">다른 날로:</span>${SPLITS.filter(x => x !== next).map(x => `<button class="chipbtn" data-act="loadSplit" data-v="${x.id}">${x.name}</button>`).join('')}</div>
   </div>`;
@@ -380,7 +380,7 @@ function vSplit(d) {
 function loadSplit(id) {
   const sp = SPLITS.find(x => x.id === id); if (!sp) return;
   const have = new Set((getDay(S.sel).ex || []).map(e => e.name)), add = sp.ex.filter(n => !have.has(n));
-  mutateDay(S.sel, d => add.forEach(name => { const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = last && !last.old ? Math.max(3, last.sets.length) : 3; d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }); }));
+  mutateDay(S.sel, d => add.forEach(name => { const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = (sp.sets && sp.sets[name]) || (last && !last.old ? Math.max(3, last.sets.length) : 3); d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }); }));
   render(); toast(`${sp.name} 루틴 ${add.length}종목 불러옴`);
 }
 /* ---------- 운동 ---------- */
@@ -847,7 +847,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v33 (11/19 종목별 휴식 · 부위 목표 세트 · 여유 횟수)</div>
+    <div class="muted sm">앱 버전 v34 (11/19 3분할 루틴 재구성)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
