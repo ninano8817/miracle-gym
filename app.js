@@ -347,7 +347,7 @@ function vSessBar(d) {
 }
 /* ---------- 3분할 순환 ---------- */
 function splitOfEx(exs) {
-  const cnt = {}; (exs || []).forEach(e => { const n = setsDone(e).length || (e.sets || []).length; const p = exInfo(e.name).part; cnt[p] = (cnt[p] || 0) + n; });
+  const cnt = {}; (exs || []).filter(e => !e.wu).forEach(e => { const n = setsDone(e).length || (e.sets || []).length; const p = exInfo(e.name).part; cnt[p] = (cnt[p] || 0) + n; });
   let best = null; SPLITS.forEach(sp => { if ((cnt[sp.part] || 0) > 0 && (!best || cnt[sp.part] > cnt[best.part])) best = sp; });
   return best;
 }
@@ -393,11 +393,11 @@ function warmups(name, w) {
 function vWarmTip(name, sg, info) {
   const W = warmups(name, sg.w), fw = x => x.w == null ? '' : info.type === 'barbell' ? (x.w <= barOf(info) ? `빈 바(${x.w}kg) ` : `${fmtW(info.type, x.w, barOf(info))} `) : `${fmtW(info.type, x.w, barOf(info))} `;
   const body = sg.w == null ? '본 세트 무게의 40%로 12회 → 60%로 8회' : W.map(x => `${fw(x)}× ${x.r}회`).join(' → ');
-  return `<div class="wutip sm"><b>워밍업 ${W.length}세트</b><span>${body}</span><span class="muted">세트 사이 1분 · 기록하지 않아도 되고, 본 세트부터 체크하세요</span></div>`;
+  return `<div class="wutip sm"><b>제안 · ${W.length}세트</b><span>${body}</span><span class="muted">세트 사이 1분 · 주간 세트와 무게 추천 계산에는 들어가지 않아요</span></div>`;
 }
 function loadSplit(id) {
   const sp = SPLITS.find(x => x.id === id); if (!sp) return;
-  const day = getDay(S.sel), have = new Set((day.ex || []).map(e => e.name)), add = splitList(sp, S.sel).filter(n => !have.has(n));
+  const day = getDay(S.sel), have = new Set((day.ex || []).filter(e => !e.wu).map(e => e.name)), add = splitList(sp, S.sel).filter(n => !have.has(n));
   mutateDay(S.sel, d => add.forEach(name => { const sg = suggest(name, S.sel), n = setsFor(sp, name); d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }); }));
   render(); toast(`${sp.name} 루틴 ${add.length}종목 불러옴`);
 }
@@ -408,11 +408,11 @@ function vGym() {
   return `<div class="page">
   <header class="hdr"><div><div class="muted sm">${fmtDate(d)} · ${dayN(d)}</div><h1>${ss ? `${({ run: '운동 중', paused: '일시정지', done: '운동 완료' })[ss.state]} <span class="tnum" id="elapsed" data-start="${ss.start}" data-pt="${ss.pt}" data-state="${ss.state}">${fmtDur(ss.sec)}</span>` : '운동'}</h1></div>${dateBar()}</header>
   ${ss && ss.state === 'done' && d === today() ? `<div class="row g6 sm"><span class="muted">운동을 마쳤습니다.</span><button class="chipbtn" data-act="sessResume">이어서 하기</button></div>` : ''}
-  ${ex.length ? '' : vSplit(d)}
-  ${ex.length ? '' : `<div class="card col"><b>직접 고르려면</b><span class="muted sm">이번 주 부족한 부위: ${(() => { const p = weekParts(weekStart(d)); return MAIN_PARTS.slice().sort((a, b) => p[a] - p[b])[0]; })()}</span></div>`}
+  ${ex.some(e => !e.wu) ? '' : vSplit(d)}
+  ${ex.some(e => !e.wu) ? '' : `<div class="card col"><b>직접 고르려면</b><span class="muted sm">이번 주 부족한 부위: ${(() => { const p = weekParts(weekStart(d)); return MAIN_PARTS.slice().sort((a, b) => p[a] - p[b])[0]; })()}</span></div>`}
   ${ex.map((e, i) => exCard(e, i, d)).join('')}
-  <button class="dashed" data-act="openSearch">${ic('search', 18, 2.2)} 종목 검색해서 추가</button>
-  ${ex.length ? `<div class="row g6 sm wrap"><span class="muted">루틴에서 빠진 종목 더하기:</span>${SPLITS.map(x => `<button class="chipbtn" data-act="loadSplit" data-v="${x.id}">${x.name}</button>`).join('')}</div>` : ''}
+  <div class="grid2 g6"><button class="dashed" data-act="openSearch" data-v="wu">${ic('search', 18, 2.2)} 워밍업 추가</button><button class="dashed" data-act="openSearch">${ic('search', 18, 2.2)} 종목 추가</button></div>
+  ${ex.some(e => !e.wu) ? `<div class="row g6 sm wrap"><span class="muted">루틴에서 빠진 종목 더하기:</span>${SPLITS.map(x => `<button class="chipbtn" data-act="loadSplit" data-v="${x.id}">${x.name}</button>`).join('')}</div>` : ''}
   <div class="card col">
     <b>유산소</b>
     ${(day.cardio || []).map((c, i) => `<div class="between"><span>${esc(c.type)} ${c.min || 0}분${c.km ? ' · ' + c.km + 'km' : ''}</span><button class="iconbtn sm" data-act="cardioDel" data-v="${i}" aria-label="삭제">${ic('trash', 16)}</button></div>`).join('')}
@@ -424,7 +424,7 @@ function vGym() {
 }
 function exCard(e, i, d) {
   const info = exInfo(e.name), T = TYPES[info.type] || TYPES.dumbbell, last = lastSession(e.name, d), sg = suggest(e.name, d), bar = barOf(info);
-  const doneN = (e.sets || []).filter(s => s.done && !s.wu).length, workN = (e.sets || []).filter(s => !s.wu).length;
+  const doneN = (e.sets || []).filter(s => s.done && (e.wu || !s.wu)).length, workN = (e.sets || []).filter(s => e.wu || !s.wu).length;
   let wk = 0; const rows = (e.sets || []).map((s, j) => {
     const k = s.wu ? -1 : wk++, prev = s.wu ? '워밍업' : last && last.sets[k] ? fmtSet(info.type, last.sets[k]) : '-';
     const shown = info.type === 'barbell' ? (s.w != null ? r2((s.w - bar) / 2) : '') : (s.w ?? '');
@@ -436,12 +436,12 @@ function exCard(e, i, d) {
       <button class="chk ${s.done ? 'on' : ''}" data-act="setDone" data-v="${i}:${j}" aria-label="${j + 1}세트 완료">${ic('check', 18, 3)}</button></div>${s.done && s.rir == null && T.input && !s.wu ? `<div class="rirrow"><span class="sm muted">몇 회 더 할 수 있었나요?</span>${[0, 1, 2, 3].map(n => `<button class="chipbtn sm" data-act="rir" data-v="${i}:${j}:${n}">${n === 3 ? '3+' : n}</button>`).join('')}</div>` : ''}`;
   }).join('');
   return `<div class="card excard" data-ex="${i}">
-    <div class="between"><div class="row g6 grow"><button class="grip" aria-label="${esc(e.name)} 순서 옮기기 (끌기)">${ic('grip', 20, 2.4)}</button><div class="col"><b class="lg">${i === 0 && !ABS.includes(e.name) ? '<span class="wubadge">워밍업 먼저</span>' : ''}${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''} · 휴식 ${fmtRest(restOf(e.name))}</span></div></div>
+    <div class="between"><div class="row g6 grow"><button class="grip" aria-label="${esc(e.name)} 순서 옮기기 (끌기)">${ic('grip', 20, 2.4)}</button><div class="col"><b class="lg">${e.wu ? '<span class="wubadge">워밍업</span>' : ''}${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''} · 휴식 ${fmtRest(restOf(e.name))}</span></div></div>
       <div class="row g4"><span class="pill">${doneN} / ${workN}</span><button class="iconbtn sm round acc" data-act="guide" data-v="${esc(e.name)}" aria-label="${esc(e.name)} 자세 보기">${ic('info', 18)}</button></div></div>
-    ${i === 0 && !ABS.includes(e.name) ? vWarmTip(e.name, sg, info) : ''}
+    ${e.wu ? vWarmTip(e.name, sg, info) : ''}
     <div class="sethead"><span>세트</span><span>지난번</span><span>${T.input || ''}${T.input ? ' kg' : ''}</span><span>${info.type === 'time' ? '초' : '회'}</span><span></span></div>
     ${rows}
-    <div class="between"><span class="sm ${sg.up ? 'acc b' : 'muted'}">${esc(sg.text)}</span>
+    <div class="between"><span class="sm ${sg.up && !e.wu ? 'acc b' : 'muted'}">${e.wu ? '가볍게 근육과 관절을 깨우는 세트' : esc(sg.text)}</span>
       <div class="row g4"><button class="iconbtn sm" data-act="setDel" data-v="${i}" aria-label="세트 빼기">${ic('minus', 16, 2.4)}</button><button class="iconbtn sm" data-act="setAdd" data-v="${i}" aria-label="세트 추가">${ic('plus', 16, 2.4)}</button><button class="iconbtn sm" data-act="exDel" data-v="${i}" aria-label="종목 삭제">${ic('trash', 16)}</button></div></div>
   </div>`;
 }
@@ -457,6 +457,7 @@ function vSearch() {
   <div class="searchhead">
     <div class="row g6"><button class="iconbtn" data-act="closeOverlay" aria-label="닫기">${ic('left', 22, 2.2)}</button>
       <label class="search">${ic('search', 18, 2.2)}<input id="exQ" value="${esc(q)}" placeholder="초성·한글·영문 (예: ㅂㅊ, 벤치, bench)" autocomplete="off" aria-label="종목 검색"></label></div>
+    <div class="seg">${[['main', '본 운동으로 추가'], ['wu', '워밍업으로 추가']].map(([k, l]) => `<button class="${(k === 'wu') === !!S.searchWu ? 'on' : ''}" data-act="searchMode" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="chips scroll">${['전체', ...PARTS].map(p => `<button class="chip ${S.part === p ? 'on' : ''}" data-act="part" data-v="${p}">${p}</button>`).join('')}</div>
     <label class="between toggle"><span>우리 단지 헬스장 기구만</span><input type="checkbox" data-act="gymOnly" ${gymOnly ? 'checked' : ''}></label>
   </div>
@@ -465,7 +466,7 @@ function vSearch() {
   <div class="list">${res.map(({ e, m }) => { const ls = lastSession(e.name, today()); return `<button class="lrow" data-act="addEx" data-v="${esc(e.name)}">
       ${e.img ? `<img src="img/${e.img}_0.jpg" alt="" loading="lazy">` : `<span class="ph">${ic('gym', 20)}</span>`}
       <span class="col f1"><span>${hlName(e.name, m.hl)}${e.gym ? '' : ' <span class="tag">헬스장에 없음</span>'}</span><span class="muted sm">${e.part} · ${(TYPES[e.type] || {}).label || ''} · ${ls ? `지난번 ${fmtSet(e.type, ls.sets[0])}` : '처음 하는 종목'}</span></span>
-      <span class="acc b sm">추가</span></button>`; }).join('') || `<div class="muted pad">검색 결과가 없습니다.</div>`}</div></div>
+      <span class="acc b sm">${S.searchWu ? '워밍업' : '추가'}</span></button>`; }).join('') || `<div class="muted pad">검색 결과가 없습니다.</div>`}</div></div>
   <div class="card col">
     <b>찾는 종목이 없나요?</b>
     <div class="row g6"><input id="newExName" placeholder="종목 이름" value="${esc(q && !/^[ㄱ-ㅎ]+$/.test(q) ? q : '')}" aria-label="새 종목 이름">
@@ -866,7 +867,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v36 (11/21 첫 종목 워밍업 안내)</div>
+    <div class="muted sm">앱 버전 v37 (11/21 워밍업 직접 선택)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -942,9 +943,10 @@ document.addEventListener('click', async ev => {
       if (!n) { toast('음식 이름을 입력하세요'); break; }
       S.manual = false; mutateSettings(s => { s.customFoods = (s.customFoods || []).filter(x => x.n !== n).concat([f]); }); addCart(f); break;
     }
-    case 'openSearch': S.overlay = 'search'; S.q = ''; render(); window.scrollTo(0, 0); setTimeout(() => document.getElementById('exQ')?.focus(), 50); break;
+    case 'openSearch': S.overlay = 'search'; S.searchWu = v === 'wu'; S.q = ''; render(); window.scrollTo(0, 0); setTimeout(() => document.getElementById('exQ')?.focus(), 50); break;
     case 'part': S.part = v; S._keepScroll = true; render(); break;
-    case 'addEx': addExercise(v); break;
+    case 'addEx': if (S.searchWu) addWarmup(v); else addExercise(v); break;
+    case 'searchMode': S.searchWu = v === 'wu'; patch('exRes', vSearch); document.querySelectorAll('[data-act=searchMode]').forEach(b => b.classList.toggle('on', (b.dataset.v === 'wu') === S.searchWu)); break;
     case 'newEx': {
       const name = document.getElementById('newExName').value.trim(); if (!name) { toast('종목 이름을 입력하세요'); break; }
       const ex = { name, part: document.getElementById('newExPart').value, type: document.getElementById('newExType').value, mine: true };
@@ -959,7 +961,7 @@ document.addEventListener('click', async ev => {
     }
     case 'rir': { const [i, j, n] = v.split(':').map(Number); mutateDay(S.sel, d => { d.ex[i].sets[j].rir = n; }); break; }
     case 'rirClr': { const [i, j] = v.split(':').map(Number); mutateDay(S.sel, d => { delete d.ex[i].sets[j].rir; }); break; }
-    case 'setAdd': mutateDay(S.sel, d => { const e = d.ex[+v], l = e.sets[e.sets.length - 1]; e.sets.push({ w: l ? l.w : null, r: null }); }); break;
+    case 'setAdd': mutateDay(S.sel, d => { const e = d.ex[+v], l = e.sets[e.sets.length - 1]; e.sets.push(e.wu ? { wu: true, w: l ? l.w : null, r: l ? l.r : null } : { w: l ? l.w : null, r: null }); }); break;
     case 'setDel': mutateDay(S.sel, d => { const e = d.ex[+v]; if (e.sets.length > 1) e.sets.pop(); }); break;
     case 'exDel': if (confirmBox(el, '이 종목을 삭제할까요?')) mutateDay(S.sel, d => { d.ex.splice(+v, 1); }); break;
     case 'cardioAdd': { const min = num(document.getElementById('cMin').value), km = num(document.getElementById('cKm').value); if (!min && !km) { toast('시간이나 거리를 입력하세요'); break; } mutateDay(S.sel, d => d.cardio.push({ type: document.getElementById('cType').value, min, km })); break; }
@@ -978,6 +980,13 @@ document.addEventListener('click', async ev => {
 function confirmBox(el, msg) { if (el.dataset.armed) return true; el.dataset.armed = '1'; toast(msg + ' 한 번 더 누르면 삭제'); setTimeout(() => delete el.dataset.armed, 2500); return false; }
 
 function addCart(f) { const ex = S.cart.find(c => c.n === f.n); if (ex) ex.q += 1; else S.cart.push({ n: f.n, k: +f.k || 0, p: +f.p || 0, c: +f.c || 0, f: +f.f || 0, q: 1 }); S.fq = ''; S._keepScroll = true; render(); toast(`${f.n} 담음`); }
+// 워밍업: 사용자가 고른 종목을 맨 위 워밍업 묶음 끝에 추가 (본 운동과 같은 종목도 가능)
+function addWarmup(name) {
+  const sg = suggest(name, S.sel), sets = warmups(name, sg.w).map(x => Object.assign({}, x, { wu: true }));
+  if (sets.length < 2) sets.push(Object.assign({}, sets[0]));
+  mutateDay(S.sel, d => { const at = d.ex.findIndex(e => !e.wu); d.ex.splice(at < 0 ? d.ex.length : at, 0, { name, wu: true, sets }); });
+  S.overlay = null; S.searchWu = false; S.tab = 'gym'; render(); toast(`워밍업 ${name} 추가`); window.scrollTo(0, 0);
+}
 function addExercise(name) {
   const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = last && !last.old ? Math.max(3, last.sets.length) : 3;
   mutateDay(S.sel, d => d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }));
