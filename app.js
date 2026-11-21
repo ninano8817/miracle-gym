@@ -372,7 +372,7 @@ function vSplit(d) {
   return `<div class="card col">
     <div class="between"><b>오늘은 ${next.name} 차례</b><span class="muted sm">${last ? `지난번 ${md(last.date)} ${last.sp.name}` : '3분할 시작'} · 이번 주 하체 ${legWeek}/2</span></div>
     <span class="sm">${next.name} ${next.sub}</span>
-    <span class="muted sm">워밍업 2 → ${splitList(next, d).map(n => `${n} ${setsFor(next, n)}`).join(' · ')} <b class="acc">· 본 운동 ${splitList(next, d).reduce((a, n) => a + setsFor(next, n), 0)}세트</b></span>
+    <span class="muted sm">${splitList(next, d).map(n => `${n} ${setsFor(next, n)}`).join(' · ')} <b class="acc">· 본 운동 ${splitList(next, d).reduce((a, n) => a + setsFor(next, n), 0)}세트</b></span>
     <button class="btn pri" data-act="loadSplit" data-v="${next.id}">${next.name} 루틴 불러오기</button>
     <div class="row g6 sm"><span class="muted">다른 날로:</span>${SPLITS.filter(x => x !== next).map(x => `<button class="chipbtn" data-act="loadSplit" data-v="${x.id}">${x.name}</button>`).join('')}</div>
   </div>`;
@@ -390,12 +390,16 @@ function warmups(name, w) {
   const min = t === 'barbell' ? barOf(info) : 0;
   return [{ wu: true, w: Math.max(min, rnd(w * 0.4)), r: 12 }, { wu: true, w: Math.max(min, rnd(w * 0.6)), r: 8 }];
 }
+function vWarmTip(name, sg, info) {
+  const W = warmups(name, sg.w), fw = x => x.w == null ? '' : info.type === 'barbell' ? (x.w <= barOf(info) ? `빈 바(${x.w}kg) ` : `${fmtW(info.type, x.w, barOf(info))} `) : `${fmtW(info.type, x.w, barOf(info))} `;
+  const body = sg.w == null ? '본 세트 무게의 40%로 12회 → 60%로 8회' : W.map(x => `${fw(x)}× ${x.r}회`).join(' → ');
+  return `<div class="wutip sm"><b>워밍업 ${W.length}세트</b><span>${body}</span><span class="muted">세트 사이 1분 · 기록하지 않아도 되고, 본 세트부터 체크하세요</span></div>`;
+}
 function loadSplit(id) {
   const sp = SPLITS.find(x => x.id === id); if (!sp) return;
-  const day = getDay(S.sel), have = new Set((day.ex || []).map(e => e.name)), add = splitList(sp, S.sel).filter(n => !have.has(n)), first = !(day.ex || []).length;
-  mutateDay(S.sel, d => add.forEach((name, k) => { const sg = suggest(name, S.sel), n = setsFor(sp, name), sets = [...Array(n)].map(() => ({ w: sg.w, r: null }));
-    d.ex.push({ name, sets: first && k === 0 ? warmups(name, sg.w).concat(sets) : sets }); }));
-  render(); toast(`${sp.name} 루틴 ${add.length}종목 불러옴${first ? ' · 첫 종목 워밍업 포함' : ''}`);
+  const day = getDay(S.sel), have = new Set((day.ex || []).map(e => e.name)), add = splitList(sp, S.sel).filter(n => !have.has(n));
+  mutateDay(S.sel, d => add.forEach(name => { const sg = suggest(name, S.sel), n = setsFor(sp, name); d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }); }));
+  render(); toast(`${sp.name} 루틴 ${add.length}종목 불러옴`);
 }
 /* ---------- 운동 ---------- */
 function vGym() {
@@ -432,8 +436,9 @@ function exCard(e, i, d) {
       <button class="chk ${s.done ? 'on' : ''}" data-act="setDone" data-v="${i}:${j}" aria-label="${j + 1}세트 완료">${ic('check', 18, 3)}</button></div>${s.done && s.rir == null && T.input && !s.wu ? `<div class="rirrow"><span class="sm muted">몇 회 더 할 수 있었나요?</span>${[0, 1, 2, 3].map(n => `<button class="chipbtn sm" data-act="rir" data-v="${i}:${j}:${n}">${n === 3 ? '3+' : n}</button>`).join('')}</div>` : ''}`;
   }).join('');
   return `<div class="card excard" data-ex="${i}">
-    <div class="between"><div class="row g6 grow"><button class="grip" aria-label="${esc(e.name)} 순서 옮기기 (끌기)">${ic('grip', 20, 2.4)}</button><div class="col"><b class="lg">${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''} · 휴식 ${fmtRest(restOf(e.name))}</span></div></div>
+    <div class="between"><div class="row g6 grow"><button class="grip" aria-label="${esc(e.name)} 순서 옮기기 (끌기)">${ic('grip', 20, 2.4)}</button><div class="col"><b class="lg">${i === 0 && !ABS.includes(e.name) ? '<span class="wubadge">워밍업 먼저</span>' : ''}${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''} · 휴식 ${fmtRest(restOf(e.name))}</span></div></div>
       <div class="row g4"><span class="pill">${doneN} / ${workN}</span><button class="iconbtn sm round acc" data-act="guide" data-v="${esc(e.name)}" aria-label="${esc(e.name)} 자세 보기">${ic('info', 18)}</button></div></div>
+    ${i === 0 && !ABS.includes(e.name) ? vWarmTip(e.name, sg, info) : ''}
     <div class="sethead"><span>세트</span><span>지난번</span><span>${T.input || ''}${T.input ? ' kg' : ''}</span><span>${info.type === 'time' ? '초' : '회'}</span><span></span></div>
     ${rows}
     <div class="between"><span class="sm ${sg.up ? 'acc b' : 'muted'}">${esc(sg.text)}</span>
@@ -861,7 +866,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v35 (11/21 워밍업 · 팔+복근 마무리 루틴)</div>
+    <div class="muted sm">앱 버전 v36 (11/21 첫 종목 워밍업 안내)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -974,8 +979,8 @@ function confirmBox(el, msg) { if (el.dataset.armed) return true; el.dataset.arm
 
 function addCart(f) { const ex = S.cart.find(c => c.n === f.n); if (ex) ex.q += 1; else S.cart.push({ n: f.n, k: +f.k || 0, p: +f.p || 0, c: +f.c || 0, f: +f.f || 0, q: 1 }); S.fq = ''; S._keepScroll = true; render(); toast(`${f.n} 담음`); }
 function addExercise(name) {
-  const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = last && !last.old ? Math.max(3, last.sets.length) : 3, first = !(getDay(S.sel).ex || []).length && !ABS.includes(name);
-  mutateDay(S.sel, d => { const sets = [...Array(n)].map(() => ({ w: sg.w, r: null })); d.ex.push({ name, sets: first ? warmups(name, sg.w).concat(sets) : sets }); });
+  const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = last && !last.old ? Math.max(3, last.sets.length) : 3;
+  mutateDay(S.sel, d => d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }));
   S.overlay = null; S.tab = 'gym'; render(); toast(`${name} 추가`);
   setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 50);
 }
