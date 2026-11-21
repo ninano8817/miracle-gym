@@ -463,10 +463,10 @@ function vSearch() {
   </div>
   <div id="exRes">${fallback && recent.length ? `<div class="sec">최근 한 종목</div><div class="chips">${recent.slice(0, 8).map(n => `<button class="chip" data-act="addEx" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
   <div class="sec">${q ? `검색 결과 ${res.length}` : S.part === '전체' ? '전체 종목' : S.part}</div>
-  <div class="list">${res.map(({ e, m }) => { const ls = lastSession(e.name, today()); return `<button class="lrow" data-act="addEx" data-v="${esc(e.name)}">
-      ${e.img ? `<img src="img/${e.img}_0.jpg" alt="" loading="lazy">` : `<span class="ph">${ic('gym', 20)}</span>`}
-      <span class="col f1"><span>${hlName(e.name, m.hl)}${e.gym ? '' : ' <span class="tag">헬스장에 없음</span>'}</span><span class="muted sm">${e.part} · ${(TYPES[e.type] || {}).label || ''} · ${ls ? `지난번 ${fmtSet(e.type, ls.sets[0])}` : '처음 하는 종목'}</span></span>
-      <span class="acc b sm">${S.searchWu ? '워밍업' : '추가'}</span></button>`; }).join('') || `<div class="muted pad">검색 결과가 없습니다.</div>`}</div></div>
+  <div class="list">${res.map(({ e, m }) => { const ls = lastSession(e.name, today()); return `<div class="lrow">
+      <button class="thumb" data-act="guide" data-v="${esc(e.name)}" aria-label="${esc(e.name)} 설명 보기">${e.img ? `<img src="img/${e.img}_0.jpg" alt="" loading="lazy">` : `<span class="ph">${ic('gym', 20)}</span>`}<i>${ic('info', 12, 2.6)}</i></button>
+      <button class="lmain" data-act="addEx" data-v="${esc(e.name)}"><span class="col f1"><span>${hlName(e.name, m.hl)}${e.gym ? '' : ' <span class="tag">헬스장에 없음</span>'}</span><span class="muted sm">${e.part} · ${(TYPES[e.type] || {}).label || ''} · ${ls ? `지난번 ${fmtSet(e.type, ls.sets[0])}` : '처음 하는 종목'}</span></span>
+      <span class="acc b sm">${S.searchWu ? '워밍업' : '추가'}</span></button></div>`; }).join('') || `<div class="muted pad">검색 결과가 없습니다.</div>`}</div></div>
   <div class="card col">
     <b>찾는 종목이 없나요?</b>
     <div class="row g6"><input id="newExName" placeholder="종목 이름" value="${esc(q && !/^[ㄱ-ㅎ]+$/.test(q) ? q : '')}" aria-label="새 종목 이름">
@@ -867,7 +867,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v37 (11/21 워밍업 직접 선택)</div>
+    <div class="muted sm">앱 버전 v38 (11/22 검색 썸네일 → 종목 설명)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
