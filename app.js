@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
-import { TYPES, PARTS, EXERCISES, FOODS, PRESETS, SPLITS } from './data.js';
+import { TYPES, PARTS, EXERCISES, FOODS, PRESETS, SPLITS, ABS, AB_SETS } from './data.js';
 import { CAFE, CAFE_NAME } from './menus.js';
 
 /* ================= 기본 ================= */
@@ -160,9 +160,9 @@ function fatOn(d) { return num(getHealth(d).fat); }
 function latestFat(upto) { for (let i = 0; i < 30; i++) { const d = addDays(upto, -i); const f = fatOn(d); if (f != null) return { f, d }; } return null; }
 function avgWeight(end, days = 7) { const ws = []; for (let i = 0; i < days; i++) { const w = weightOn(addDays(end, -i)); if (w != null) ws.push(w); } return ws.length ? ws.reduce((a, b) => a + b) / ws.length : null; }
 function latestWeight(upto) { for (let i = 0; i < 30; i++) { const d = addDays(upto, -i); const w = weightOn(d); if (w != null) return { w, d }; } return null; }
-function setsDone(e) { return (e.sets || []).filter(s => s.done || (s.done === undefined && num(s.r))); }
+function setsDone(e) { return (e.sets || []).filter(s => !s.wu && (s.done || (s.done === undefined && num(s.r)))); }
 // 부위별 주간 목표 세트 (근비대 일반 권장 범위)
-const PART_TGT = { '가슴': [10, 20], '등': [10, 20], '하체': [10, 20], '어깨': [8, 16], '팔': [6, 12], '코어': [4, 10] };
+const PART_TGT = { '가슴': [10, 20], '등': [10, 20], '하체': [10, 20], '어깨': [8, 16], '팔': [6, 12], '코어': [6, 18] };
 function weekParts(ws) {
   const out = Object.fromEntries(PARTS.map(p => [p, 0]));
   for (let i = 0; i < 7; i++) { (getDay(addDays(ws, i)).ex || []).forEach(e => { const p = exInfo(e.name).part; if (p in out) out[p] += setsDone(e).length; }); }
@@ -372,16 +372,30 @@ function vSplit(d) {
   return `<div class="card col">
     <div class="between"><b>오늘은 ${next.name} 차례</b><span class="muted sm">${last ? `지난번 ${md(last.date)} ${last.sp.name}` : '3분할 시작'} · 이번 주 하체 ${legWeek}/2</span></div>
     <span class="sm">${next.name} ${next.sub}</span>
-    <span class="muted sm">${next.ex.map(n => `${n} ${(next.sets || {})[n] || 3}세트`).join(' · ')} <b class="acc">· 총 ${next.ex.reduce((a, n) => a + ((next.sets || {})[n] || 3), 0)}세트</b></span>
+    <span class="muted sm">워밍업 2 → ${splitList(next, d).map(n => `${n} ${setsFor(next, n)}`).join(' · ')} <b class="acc">· 본 운동 ${splitList(next, d).reduce((a, n) => a + setsFor(next, n), 0)}세트</b></span>
     <button class="btn pri" data-act="loadSplit" data-v="${next.id}">${next.name} 루틴 불러오기</button>
     <div class="row g6 sm"><span class="muted">다른 날로:</span>${SPLITS.filter(x => x !== next).map(x => `<button class="chipbtn" data-act="loadSplit" data-v="${x.id}">${x.name}</button>`).join('')}</div>
   </div>`;
 }
+// 오늘 할 복근: 마지막으로 한 복근 종목의 반대 (기록 없으면 첫 번째)
+function nextAb(before) { let lastD = '', lastN = null; for (const se of sessions()) { if (se.old || se.date >= before) continue; for (const e of se.ex) if (ABS.includes(e.name) && setsDone(e).length && se.date > lastD) { lastD = se.date; lastN = e.name; } } return lastN ? ABS[(ABS.indexOf(lastN) + 1) % ABS.length] : ABS[0]; }
+function splitList(sp, d) { return sp.ex.concat([nextAb(d)]); }
+function setsFor(sp, name) { return ABS.includes(name) ? AB_SETS : (sp.sets && sp.sets[name]) || 3; }
+// 워밍업 2세트: 본 무게의 약 40%×12, 60%×8 (보조 머신은 보조 +20/+10kg)
+function warmups(name, w) {
+  const info = exInfo(name), t = info.type, rnd = x => t === 'dumbbell' ? Math.max(1, Math.round(x)) : Math.round(x / 2.5) * 2.5;
+  if (w == null) return [{ wu: true, w: null, r: 12 }, { wu: true, w: null, r: 8 }];
+  if (t === 'assist') return [{ wu: true, w: w + 20, r: 10 }, { wu: true, w: w + 10, r: 6 }];
+  if (t === 'body' || t === 'time') return [{ wu: true, w: null, r: 10 }];
+  const min = t === 'barbell' ? barOf(info) : 0;
+  return [{ wu: true, w: Math.max(min, rnd(w * 0.4)), r: 12 }, { wu: true, w: Math.max(min, rnd(w * 0.6)), r: 8 }];
+}
 function loadSplit(id) {
   const sp = SPLITS.find(x => x.id === id); if (!sp) return;
-  const have = new Set((getDay(S.sel).ex || []).map(e => e.name)), add = sp.ex.filter(n => !have.has(n));
-  mutateDay(S.sel, d => add.forEach(name => { const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = (sp.sets && sp.sets[name]) || (last && !last.old ? Math.max(3, last.sets.length) : 3); d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }); }));
-  render(); toast(`${sp.name} 루틴 ${add.length}종목 불러옴`);
+  const day = getDay(S.sel), have = new Set((day.ex || []).map(e => e.name)), add = splitList(sp, S.sel).filter(n => !have.has(n)), first = !(day.ex || []).length;
+  mutateDay(S.sel, d => add.forEach((name, k) => { const sg = suggest(name, S.sel), n = setsFor(sp, name), sets = [...Array(n)].map(() => ({ w: sg.w, r: null }));
+    d.ex.push({ name, sets: first && k === 0 ? warmups(name, sg.w).concat(sets) : sets }); }));
+  render(); toast(`${sp.name} 루틴 ${add.length}종목 불러옴${first ? ' · 첫 종목 워밍업 포함' : ''}`);
 }
 /* ---------- 운동 ---------- */
 function vGym() {
@@ -406,20 +420,20 @@ function vGym() {
 }
 function exCard(e, i, d) {
   const info = exInfo(e.name), T = TYPES[info.type] || TYPES.dumbbell, last = lastSession(e.name, d), sg = suggest(e.name, d), bar = barOf(info);
-  const doneN = (e.sets || []).filter(s => s.done).length;
-  const rows = (e.sets || []).map((s, j) => {
-    const prev = last && last.sets[j] ? fmtSet(info.type, last.sets[j]) : '-';
+  const doneN = (e.sets || []).filter(s => s.done && !s.wu).length, workN = (e.sets || []).filter(s => !s.wu).length;
+  let wk = 0; const rows = (e.sets || []).map((s, j) => {
+    const k = s.wu ? -1 : wk++, prev = s.wu ? '워밍업' : last && last.sets[k] ? fmtSet(info.type, last.sets[k]) : '-';
     const shown = info.type === 'barbell' ? (s.w != null ? r2((s.w - bar) / 2) : '') : (s.w ?? '');
     const phW = info.type === 'barbell' ? (sg.w != null ? r2((sg.w - bar) / 2) : '') : (sg.w ?? '');
-    return `<div class="setrow ${s.done ? 'done' : ''}">
-      <span class="sn">${j + 1}${s.done && s.rir != null ? `<button class="rirtag" data-act="rirClr" data-v="${i}:${j}" aria-label="여유 횟수 다시 선택">여유${s.rir >= 3 ? '3+' : s.rir}</button>` : ''}</span><span class="prev">${prev}</span>
+    return `<div class="setrow ${s.done ? 'done' : ''} ${s.wu ? 'wu' : ''}">
+      <span class="sn">${s.wu ? 'W' : k + 1}${s.done && s.rir != null ? `<button class="rirtag" data-act="rirClr" data-v="${i}:${j}" aria-label="여유 횟수 다시 선택">여유${s.rir >= 3 ? '3+' : s.rir}</button>` : ''}</span><span class="prev">${prev}</span>
       ${T.input ? `<label class="cell"><input type="number" inputmode="decimal" step="0.25" value="${shown}" placeholder="${phW}" data-set="${i}:${j}:w" aria-label="${j + 1}세트 ${T.input} kg">${info.type === 'barbell' ? `<small data-sum="${i}:${j}">${s.w != null ? '합 ' + r1(s.w) : ''}</small>` : ''}</label>` : `<span class="cell na">–</span>`}
       <label class="cell"><input type="number" inputmode="numeric" value="${s.r ?? ''}" placeholder="${sg.r ?? ''}" data-set="${i}:${j}:r" aria-label="${j + 1}세트 ${info.type === 'time' ? '초' : '회'}"></label>
-      <button class="chk ${s.done ? 'on' : ''}" data-act="setDone" data-v="${i}:${j}" aria-label="${j + 1}세트 완료">${ic('check', 18, 3)}</button></div>${s.done && s.rir == null && T.input ? `<div class="rirrow"><span class="sm muted">몇 회 더 할 수 있었나요?</span>${[0, 1, 2, 3].map(n => `<button class="chipbtn sm" data-act="rir" data-v="${i}:${j}:${n}">${n === 3 ? '3+' : n}</button>`).join('')}</div>` : ''}`;
+      <button class="chk ${s.done ? 'on' : ''}" data-act="setDone" data-v="${i}:${j}" aria-label="${j + 1}세트 완료">${ic('check', 18, 3)}</button></div>${s.done && s.rir == null && T.input && !s.wu ? `<div class="rirrow"><span class="sm muted">몇 회 더 할 수 있었나요?</span>${[0, 1, 2, 3].map(n => `<button class="chipbtn sm" data-act="rir" data-v="${i}:${j}:${n}">${n === 3 ? '3+' : n}</button>`).join('')}</div>` : ''}`;
   }).join('');
   return `<div class="card excard" data-ex="${i}">
     <div class="between"><div class="row g6 grow"><button class="grip" aria-label="${esc(e.name)} 순서 옮기기 (끌기)">${ic('grip', 20, 2.4)}</button><div class="col"><b class="lg">${esc(e.name)}</b><span class="muted sm">${T.label} · ${T.hint}${info.type === 'barbell' ? ` (${bar}kg)` : ''} · 휴식 ${fmtRest(restOf(e.name))}</span></div></div>
-      <div class="row g4"><span class="pill">${doneN} / ${(e.sets || []).length}</span><button class="iconbtn sm round acc" data-act="guide" data-v="${esc(e.name)}" aria-label="${esc(e.name)} 자세 보기">${ic('info', 18)}</button></div></div>
+      <div class="row g4"><span class="pill">${doneN} / ${workN}</span><button class="iconbtn sm round acc" data-act="guide" data-v="${esc(e.name)}" aria-label="${esc(e.name)} 자세 보기">${ic('info', 18)}</button></div></div>
     <div class="sethead"><span>세트</span><span>지난번</span><span>${T.input || ''}${T.input ? ' kg' : ''}</span><span>${info.type === 'time' ? '초' : '회'}</span><span></span></div>
     ${rows}
     <div class="between"><span class="sm ${sg.up ? 'acc b' : 'muted'}">${esc(sg.text)}</span>
@@ -847,7 +861,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v34 (11/19 3분할 루틴 재구성)</div>
+    <div class="muted sm">앱 버전 v35 (11/21 워밍업 · 팔+복근 마무리 루틴)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -935,8 +949,8 @@ document.addEventListener('click', async ev => {
     case 'closeGuide': S.guide = null; render(); break;
     case 'setDone': {
       const [i, j] = v.split(':').map(Number); let started = false;
-      mutateDay(S.sel, d => { const e = d.ex[i], s = e.sets[j], sg = suggest(e.name, S.sel); s.done = !s.done; if (s.done) { if (s.r == null) s.r = sg.r; if (s.w == null && sg.w != null) s.w = sg.w; s.t = Date.now(); started = true; } });
-      if (started && S.sel === today()) { const nm = getDay(S.sel).ex[i].name; startTimer(restOf(nm)); } break;
+      mutateDay(S.sel, d => { const e = d.ex[i], s = e.sets[j], sg = suggest(e.name, S.sel); s.done = !s.done; if (s.done) { if (s.r == null) s.r = sg.r; if (s.w == null && sg.w != null && !s.wu) s.w = sg.w; s.t = Date.now(); started = true; } });
+      if (started && S.sel === today()) { const e = getDay(S.sel).ex[i]; startTimer(e.sets[j].wu ? 60 : restOf(e.name)); } break;
     }
     case 'rir': { const [i, j, n] = v.split(':').map(Number); mutateDay(S.sel, d => { d.ex[i].sets[j].rir = n; }); break; }
     case 'rirClr': { const [i, j] = v.split(':').map(Number); mutateDay(S.sel, d => { delete d.ex[i].sets[j].rir; }); break; }
@@ -960,8 +974,8 @@ function confirmBox(el, msg) { if (el.dataset.armed) return true; el.dataset.arm
 
 function addCart(f) { const ex = S.cart.find(c => c.n === f.n); if (ex) ex.q += 1; else S.cart.push({ n: f.n, k: +f.k || 0, p: +f.p || 0, c: +f.c || 0, f: +f.f || 0, q: 1 }); S.fq = ''; S._keepScroll = true; render(); toast(`${f.n} 담음`); }
 function addExercise(name) {
-  const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = last && !last.old ? Math.max(3, last.sets.length) : 3;
-  mutateDay(S.sel, d => d.ex.push({ name, sets: [...Array(n)].map(() => ({ w: sg.w, r: null })) }));
+  const last = lastSession(name, S.sel), sg = suggest(name, S.sel), n = last && !last.old ? Math.max(3, last.sets.length) : 3, first = !(getDay(S.sel).ex || []).length && !ABS.includes(name);
+  mutateDay(S.sel, d => { const sets = [...Array(n)].map(() => ({ w: sg.w, r: null })); d.ex.push({ name, sets: first ? warmups(name, sg.w).concat(sets) : sets }); });
   S.overlay = null; S.tab = 'gym'; render(); toast(`${name} 추가`);
   setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 50);
 }
