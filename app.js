@@ -156,7 +156,14 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 /* ================= 계산 ================= */
 function sumMeals(day) { const t = { k: 0, p: 0, c: 0, f: 0 }; (day.meals || []).forEach(m => { t.k += +m.k || 0; t.p += +m.p || 0; t.c += +m.c || 0; t.f += +m.f || 0; }); return t; }
 function weightOn(d) { return num(getHealth(d).weight); }
-function fatOn(d) { return num(getHealth(d).fat); }
+function fatRaw(d) { return num(getHealth(d).fat); }
+// 체지방률 튐 제거: 앞뒤 7일 다른 측정값의 중앙값과 2%p 넘게 차이 나면 측정 오류로 보고 제외
+function fatOn(d) {
+  const v = fatRaw(d); if (v == null) return null;
+  const nb = []; for (let i = -7; i <= 7; i++) { if (!i) continue; const x = fatRaw(addDays(d, i)); if (x != null) nb.push(x); }
+  if (nb.length < 2) return v; nb.sort((a, b) => a - b); const m = nb.length % 2 ? nb[(nb.length - 1) / 2] : (nb[nb.length / 2 - 1] + nb[nb.length / 2]) / 2;
+  return Math.abs(v - m) > 2 ? null : v;
+}
 function latestFat(upto) { for (let i = 0; i < 30; i++) { const d = addDays(upto, -i); const f = fatOn(d); if (f != null) return { f, d }; } return null; }
 function avgWeight(end, days = 7) { const ws = []; for (let i = 0; i < days; i++) { const w = weightOn(addDays(end, -i)); if (w != null) ws.push(w); } return ws.length ? ws.reduce((a, b) => a + b) / ws.length : null; }
 function latestWeight(upto) { for (let i = 0; i < 30; i++) { const d = addDays(upto, -i); const w = weightOn(d); if (w != null) return { w, d }; } return null; }
@@ -867,7 +874,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v38 (11/22 검색 썸네일 → 종목 설명)</div>
+    <div class="muted sm">앱 버전 v39 (11/22 체지방률 튀는 값 제외)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
