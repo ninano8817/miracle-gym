@@ -685,11 +685,9 @@ function vGoalCard(d) {
   const pct = x => Math.max(0, Math.min(100, x / tot * 100));
   return `<div class="card col goalcard">
     <div class="between"><div class="col g2"><b>${k}주 차 · ${day(a)}~${day(b)}</b><span class="muted sm">이번 주 일요일까지의 목표</span></div>${st ? `<span class="pill ${st.c === 'acc' ? '' : 'warnpill'}">${st.t}</span>` : ''}</div>
-    <div class="gtab">
-      <span></span><span class="muted sm">현재 (${roll ? '7일' : '이번 주'} 평균)</span><span class="muted sm">이번 주 목표</span><span class="muted sm r">남은 차이</span>
-      <span class="muted">체중</span><b class="gv">${curW != null ? r1(curW) : '–'}<small> kg</small></b><b class="gv acc">${r1(tgtW)}<small> kg</small></b>${gapCell(curW, tgtW, 'kg', 'kg')}
-      <span class="muted">체지방률</span><b class="gv">${curF != null ? r1(curF) : '–'}<small> %</small></b><b class="gv acc">${tgtF != null ? r1(tgtF) : '–'}<small> %</small></b>${gapCell(curF, tgtF, '%', '%p')}
-    </div>
+    <div class="gtab ghead"><span></span><span class="muted sm">현재 (${roll ? '7일' : '이번 주'} 평균)</span><span class="muted sm">이번 주 목표</span><span class="muted sm r">남은 차이</span></div>
+    <div class="gtab grow2"><span class="muted">체중</span><b class="gv">${curW != null ? r1(curW) : '–'}<small> kg</small></b><b class="gv acc">${r1(tgtW)}<small> kg</small></b>${gapCell(curW, tgtW, 'kg', 'kg')}</div>
+    <div class="gtab grow2"><span class="muted">체지방률</span><b class="gv">${curF != null ? r1(curF) : '–'}<small> %</small></b><b class="gv acc">${tgtF != null ? r1(tgtF) : '–'}<small> %</small></b>${gapCell(curF, tgtF, '%', '%p')}</div>
     <div class="col g4 gprog">
       <div class="between sm"><span>${P.goal}kg까지 감량 진행</span><span class="muted">${r1(lost)} / ${r1(tot)}kg</span></div>
       <div class="gbar"><i style="width:${pct(lost)}%"></i><em style="left:${pct(planLost)}%"></em></div>
@@ -883,7 +881,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v41 (11/23 홈 목표 카드 개편)</div>
+    <div class="muted sm">앱 버전 v42 (11/23 목표 카드 줄 정렬)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
