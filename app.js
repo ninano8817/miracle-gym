@@ -677,16 +677,25 @@ function actualEta(P) {
 }
 function vGoalCard(d) {
   const P = plan(); if (d < P.s0) return '';
-  const k = planWeek(P, d), [a, b] = planWeekRange(P, k), tgtW = P.w(b), tgtF = P.f(b), cw0 = planCompare(P, a, b), roll = !cw0 || cw0.n < 3, cw = roll ? planCompare(P, addDays(d, -6), d) : cw0, st = planStatus(cw && cw.diff), lf = latestFat(d), E = actualEta(P);
-  const total = Math.max(1, planWeek(P, P.goalDate));
+  const k = planWeek(P, d), [a, b] = planWeekRange(P, k), tgtW = P.w(b), tgtF = P.f(b), cw0 = planCompare(P, a, b), roll = !cw0 || cw0.n < 3, cw = roll ? planCompare(P, addDays(d, -6), d) : cw0, st = planStatus(cw && cw.diff), E = actualEta(P);
+  const fv = []; for (let i = 0; i < 7; i++) { const f = fatOn(addDays(d, -i)); if (f != null) fv.push(f); } const lfb = latestFat(d), curF = fv.length ? avgOf(fv) : lfb ? lfb.f : null, curW = cw ? cw.act : null;
+  const day = x => `${md(x)}(${DOW[parseD(x).getDay()]})`, ymd = x => { const t = parseD(x); return `${t.getFullYear()}년 ${t.getMonth() + 1}월 ${t.getDate()}일`; };
+  const gapCell = (cur, tgt, u, unitTxt) => cur == null || tgt == null ? '<b class="gc muted">–</b>' : cur - tgt <= 0.05 ? '<b class="gc acc">달성</b>' : `<b class="gc warnt">−${r1(cur - tgt)}${unitTxt}</b>`;
+  const tot = P.w0 - P.goal, lost = curW != null ? Math.max(0, P.w0 - curW) : 0, planLost = Math.max(0, P.w0 - P.w(d < P.goalDate ? d : P.goalDate));
+  const pct = x => Math.max(0, Math.min(100, x / tot * 100));
   return `<div class="card col goalcard">
-    <div class="between"><b>${k}주 차 목표 <span class="muted sm">${md(a)}–${md(b)}</span></b>${st ? `<span class="pill ${st.c === 'acc' ? '' : 'warnpill'}">${st.t}</span>` : ''}</div>
-    <div class="grid2 g6">
-      <div class="col g2"><span class="muted sm">주말 목표 체중</span><b class="lg">${r1(tgtW)}<small class="muted"> kg</small></b><span class="sm ${cw ? (cw.diff > 0.3 ? 'warnt' : 'acc') : 'muted'}">${cw ? `${roll ? '최근 7일' : '이번 주'} 평균 ${r1(cw.act)} (목표 대비 ${Math.abs(cw.diff) < 0.05 ? '±0' : (cw.diff > 0 ? '+' : '') + r1(cw.diff)})` : '체중 기록 없음'}</span></div>
-      <div class="col g2"><span class="muted sm">주말 목표 체지방률</span><b class="lg">${tgtF != null ? r1(tgtF) : '–'}<small class="muted"> %</small></b><span class="sm muted">${lf ? `최근 ${r1(lf.f)}%` : '기록 없음'}</span></div>
+    <div class="between"><div class="col g2"><b>${k}주 차 · ${day(a)}~${day(b)}</b><span class="muted sm">이번 주 일요일까지의 목표</span></div>${st ? `<span class="pill ${st.c === 'acc' ? '' : 'warnpill'}">${st.t}</span>` : ''}</div>
+    <div class="gtab">
+      <span></span><span class="muted sm">현재 (${roll ? '7일' : '이번 주'} 평균)</span><span class="muted sm">이번 주 목표</span><span class="muted sm r">남은 차이</span>
+      <span class="muted">체중</span><b class="gv">${curW != null ? r1(curW) : '–'}<small> kg</small></b><b class="gv acc">${r1(tgtW)}<small> kg</small></b>${gapCell(curW, tgtW, 'kg', 'kg')}
+      <span class="muted">체지방률</span><b class="gv">${curF != null ? r1(curF) : '–'}<small> %</small></b><b class="gv acc">${tgtF != null ? r1(tgtF) : '–'}<small> %</small></b>${gapCell(curF, tgtF, '%', '%p')}
     </div>
-    <div class="bar"><i style="width:${Math.min(100, k / total * 100)}%"></i></div>
-    <span class="sm muted">목표 ${P.goal}kg · 계획 도달 ${md(P.goalDate)} (${total}주 차)${E.eta ? ` · 지금 속도(주 ${r1(E.r)}kg)면 ${md(E.eta)}` : ''}</span>
+    <div class="col g4 gprog">
+      <div class="between sm"><span>${P.goal}kg까지 감량 진행</span><span class="muted">${r1(lost)} / ${r1(tot)}kg</span></div>
+      <div class="gbar"><i style="width:${pct(lost)}%"></i><em style="left:${pct(planLost)}%"></em></div>
+      <div class="between sm muted"><span>실제 ${Math.round(pct(lost))}%</span><span>│ 계획대로면 지금 ${Math.round(pct(planLost))}%</span></div>
+    </div>
+    <span class="sm muted">${P.goal}kg 도달: 계획 ${ymd(P.goalDate)}${E.eta ? ` · 지금 속도(주 ${r1(E.r)}kg)면 ${ymd(E.eta)}` : ''}</span>
   </div>`;
 }
 function vPlanTable() {
@@ -874,7 +883,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v40 (11/23 야끼소바 · 식용유 추가)</div>
+    <div class="muted sm">앱 버전 v41 (11/23 홈 목표 카드 개편)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
