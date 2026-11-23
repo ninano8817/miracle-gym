@@ -881,7 +881,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v42 (11/23 목표 카드 줄 정렬)</div>
+    <div class="muted sm">앱 버전 v43 (11/23 11월 4주 식단표)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
