@@ -145,6 +145,7 @@ function coachLog(n) {
     (day.cardio || []).forEach(c => L.push(`${c.type} ${c.min ? c.min + '분' : ''}${c.km ? ' ' + c.km + 'km' : ''}`));
     out.push(`${d}(${DOW[parseD(d).getDay()]}) ` + (L.length ? L.join(' | ') : '기록 없음'));
   }
+  const ib = ibList().filter(x => x.d >= addDays(today(), -n + 1)); ib.forEach(x => out.push(`인바디 ${x.d}: 체중 ${x.w ?? '-'} · 골격근량 ${x.smm ?? '-'} · 체지방량 ${x.fm ?? '-'}`));
   return out.join('\n');
 }
 const SC_NAME = '건강 데이터 서버 동기화';
@@ -696,6 +697,28 @@ function vGoalCard(d) {
     <span class="sm muted">${P.goal}kg 도달: 계획 ${ymd(P.goalDate)}${E.eta ? ` · 지금 속도(주 ${r1(E.r)}kg)면 ${ymd(E.eta)}` : ''}</span>
   </div>`;
 }
+/* ---------- 인바디 기록 (4주마다 수동 입력) ---------- */
+const ibList = () => ((S.docs.inbody || {}).list || []).slice().sort((a, b) => a.d < b.d ? -1 : 1);
+function vInbody() {
+  const L = ibList(), last = L[L.length - 1], prev = L[L.length - 2], first = L[0], pbf = x => x.w && x.fm != null ? x.fm / x.w * 100 : null;
+  const dl = (a, b, u, good) => a == null || b == null ? '' : (() => { const v = a - b; return `<span class="sm ${Math.abs(v) < 0.05 ? 'muted' : (v > 0) === good ? 'acc' : 'warnt'}">${v > 0 ? '+' : ''}${r1(v)}${u}</span>`; })();
+  const cell = (lab, v, u, pv, fv, good) => `<div class="col g2"><span class="muted sm">${lab}</span><b class="lg">${v != null ? r1(v) : '–'}<small class="muted"> ${u}</small></b>${prev ? `<span class="sm muted">직전 대비 ${dl(v, pv, u === '%' ? '%p' : u, good) || '–'}</span>` : ''}${L.length > 2 ? `<span class="sm muted">처음 대비 ${dl(v, fv, u === '%' ? '%p' : u, good) || '–'}</span>` : ''}</div>`;
+  const form = S.ibForm ? `<div class="ibform">
+      <label class="field"><span>측정일</span><input type="date" id="ibD" value="${today()}"></label>
+      <label class="field"><span>체중 kg</span><input type="number" step="0.1" inputmode="decimal" id="ibW" placeholder="75.9"></label>
+      <label class="field"><span>골격근량 kg</span><input type="number" step="0.1" inputmode="decimal" id="ibS" placeholder="34.4"></label>
+      <label class="field"><span>체지방량 kg</span><input type="number" step="0.1" inputmode="decimal" id="ibF" placeholder="15.9"></label>
+      <div class="row g6" style="grid-column:1/-1"><button class="btn" data-act="ibForm">취소</button><button class="btn pri f1" data-act="ibSave">저장</button></div></div>` : '';
+  return `<div class="card col">
+    <div class="between"><b>인바디 기록</b>${S.ibForm ? '' : `<button class="chipbtn" data-act="ibForm">+ 측정 추가</button>`}</div>
+    ${last ? `<span class="muted sm">${fmtDate(last.d)} 측정${L.length > 1 ? ` · 총 ${L.length}회` : ''}</span>
+    <div class="grid2 g6">${cell('골격근량', last.smm, 'kg', prev && prev.smm, first.smm, true)}${cell('체지방량', last.fm, 'kg', prev && prev.fm, first.fm, false)}${cell('체지방률', pbf(last), '%', prev && pbf(prev), pbf(first), false)}${cell('체중', last.w, 'kg', prev && prev.w, first.w, false)}</div>
+    <div class="note">목표: 골격근량 35kg 이상 · 체지방량 11kg 이하. 4주마다 아침 공복, 같은 조건으로 재세요.</div>
+    ${L.length > 1 ? `<div class="ptable"><table><thead><tr><th>측정일</th><th>체중</th><th>골격근</th><th>체지방</th><th>%</th><th></th></tr></thead><tbody>${L.slice().reverse().map(x => `<tr><td>${md(x.d)}</td><td>${r1(x.w)}</td><td>${r1(x.smm)}</td><td>${r1(x.fm)}</td><td>${pbf(x) != null ? r1(pbf(x)) : '–'}</td><td><button class="xbtn" data-act="ibDel" data-v="${x.d}" aria-label="${md(x.d)} 기록 삭제">×</button></td></tr>`).join('')}</tbody></table></div>` : `<button class="linkbtn" data-act="ibDel" data-v="${last.d}">이 기록 삭제</button>`}`
+    : `<span class="muted sm">인바디 결과의 체중 · 골격근량 · 체지방량을 4주마다 넣으면 근육과 지방 변화를 따로 볼 수 있어요.</span>`}
+    ${form}
+  </div>`;
+}
 function vPlanTable() {
   const P = plan(), cur = planWeek(P, today()), last = Math.max(cur, planWeek(P, P.goalDate));
   const rows = []; for (let k = 1; k <= last; k++) { const [a, b] = planWeekRange(P, k), c = k <= cur ? planCompare(P, a, b) : null, st = c && planStatus(c.diff), ft = P.f(b);
@@ -715,6 +738,7 @@ function vReport() {
   <header class="hdr"><h1>리포트</h1><div class="row g4"><button class="iconbtn" data-act="wprev" aria-label="이전 주">${ic('left', 16, 2.4)}</button><b class="sm">${md(ws)} – ${md(we)}</b><button class="iconbtn" data-act="wnext" aria-label="다음 주" ${we >= today() ? 'disabled' : ''}>${ic('right', 16, 2.4)}</button></div></header>
   <button class="card tap row between syncbtn" data-act="copyLog" data-v="14"><span class="col"><b>코치에게 보낼 기록 복사</b><span class="muted sm">최근 14일 체중·식단·운동을 텍스트로 복사 → 채팅에 붙여넣기</span></span>${ic('right', 18, 2.2)}</button>
   ${vWeightCard()}
+  ${vInbody()}
   ${vPlanTable()}
   <div class="card col">
     <div class="between"><b>단백질 ${st.targets.p}g 달성</b><span class="muted sm">${hit} / 7일</span></div>
@@ -881,7 +905,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v45 (11/25 회사 헬스장 머신 3종)</div>
+    <div class="muted sm">앱 버전 v46 (11/26 인바디 기록)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
@@ -943,6 +967,11 @@ document.addEventListener('click', async ev => {
     case 'wRange': S.wRange = v; S.wSel = null; render(); break;
     case 'runShortcut': { const n = (settings().scName || '').trim() || SC_NAME; S.scWait = Date.now(); location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(n); setTimeout(requestRender, 300); break; }
     case 'cmpPast': S.cmpPast = S.cmpPast === false; render(); break;
+    case 'ibForm': S.ibForm = !S.ibForm; render(); break;
+    case 'ibSave': { const g = id => num(document.getElementById(id).value), d = document.getElementById('ibD').value || today(), x = { d, w: g('ibW'), smm: g('ibS'), fm: g('ibF') };
+      if (x.smm == null && x.fm == null) { toast('골격근량이나 체지방량을 넣어 주세요'); break; }
+      const L = ibList().filter(y => y.d !== d); L.push(x); setDoc('inbody', { list: L }); S.ibForm = false; render(); toast('인바디 기록을 저장했어요'); break; }
+    case 'ibDel': { setDoc('inbody', { list: ibList().filter(y => y.d !== v) }); render(); toast('삭제했어요'); break; }
     case 'wMetric': S.wMetric = v; S.wSel = null; render(); break;
     case 'wPt': S.wSel = S.wSel === +v ? null : +v; S._keepScroll = true; render(); break;
     case 'sessPause': sessUpdate((t, now) => { if (t.pa) { t.pt = (t.pt || 0) + (now - t.pa); t.pa = null; } else t.pa = now; }); break;
