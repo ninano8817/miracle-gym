@@ -456,7 +456,7 @@ function exCard(e, i, d) {
 /* ---------- 종목 검색 ---------- */
 function vSearch() {
   const st = settings(), q = S.q, gymOnly = st.gymOnly !== false;
-  let list = allExercises().filter(e => (S.part === '전체' || e.part === S.part) && (!gymOnly || e.gym));
+  let list = allExercises().filter(e => (S.part === '전체' || e.part === S.part) && (!gymOnly || e.gym || e.co));
   let res = list.map(e => ({ e, m: match(e.name, `${e.en || ''} ${e.alias || ''}`, q) })).filter(x => x.m).sort((a, b) => b.m.score - a.m.score);
   const recent = []; sessions().forEach(s => s.ex.forEach(x => { if (!s.old && !recent.includes(x.name)) recent.push(x.name); }));
   const fallback = !q && S.part === '전체';
@@ -466,13 +466,13 @@ function vSearch() {
       <label class="search">${ic('search', 18, 2.2)}<input id="exQ" value="${esc(q)}" placeholder="초성·한글·영문 (예: ㅂㅊ, 벤치, bench)" autocomplete="off" aria-label="종목 검색"></label></div>
     <div class="seg">${[['main', '본 운동으로 추가'], ['wu', '워밍업으로 추가']].map(([k, l]) => `<button class="${(k === 'wu') === !!S.searchWu ? 'on' : ''}" data-act="searchMode" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="chips scroll">${['전체', ...PARTS].map(p => `<button class="chip ${S.part === p ? 'on' : ''}" data-act="part" data-v="${p}">${p}</button>`).join('')}</div>
-    <label class="between toggle"><span>우리 단지 헬스장 기구만</span><input type="checkbox" data-act="gymOnly" ${gymOnly ? 'checked' : ''}></label>
+    <label class="between toggle"><span>우리 헬스장 기구만 (단지 · 회사)</span><input type="checkbox" data-act="gymOnly" ${gymOnly ? 'checked' : ''}></label>
   </div>
   <div id="exRes">${fallback && recent.length ? `<div class="sec">최근 한 종목</div><div class="chips">${recent.slice(0, 8).map(n => `<button class="chip" data-act="addEx" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
   <div class="sec">${q ? `검색 결과 ${res.length}` : S.part === '전체' ? '전체 종목' : S.part}</div>
   <div class="list">${res.map(({ e, m }) => { const ls = lastSession(e.name, today()); return `<div class="lrow">
       <button class="thumb" data-act="guide" data-v="${esc(e.name)}" aria-label="${esc(e.name)} 설명 보기">${e.img ? `<img src="img/${e.img}_0.jpg" alt="" loading="lazy">` : `<span class="ph">${ic('gym', 20)}</span>`}<i>${ic('info', 12, 2.6)}</i></button>
-      <button class="lmain" data-act="addEx" data-v="${esc(e.name)}"><span class="col f1"><span>${hlName(e.name, m.hl)}${e.gym ? '' : ' <span class="tag">헬스장에 없음</span>'}</span><span class="muted sm">${e.part} · ${(TYPES[e.type] || {}).label || ''} · ${ls ? `지난번 ${fmtSet(e.type, ls.sets[0])}` : '처음 하는 종목'}</span></span>
+      <button class="lmain" data-act="addEx" data-v="${esc(e.name)}"><span class="col f1"><span>${hlName(e.name, m.hl)}${e.gym ? '' : e.co ? ' <span class="tag co">회사 헬스장</span>' : ' <span class="tag">헬스장에 없음</span>'}</span><span class="muted sm">${e.part} · ${(TYPES[e.type] || {}).label || ''} · ${ls ? `지난번 ${fmtSet(e.type, ls.sets[0])}` : '처음 하는 종목'}</span></span>
       <span class="acc b sm">${S.searchWu ? '워밍업' : '추가'}</span></button></div>`; }).join('') || `<div class="muted pad">검색 결과가 없습니다.</div>`}</div></div>
   <div class="card col">
     <b>찾는 종목이 없나요?</b>
@@ -881,7 +881,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v44 (11/24 상단 여백)</div>
+    <div class="muted sm">앱 버전 v45 (11/25 회사 헬스장 머신 3종)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
