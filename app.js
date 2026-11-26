@@ -207,7 +207,7 @@ function suggest(name, before) {
   return { w: top, r: hi, text: `${fmtW(type, top, barOf(info))} 유지 · 모든 세트 ${hi}회 목표`, up: false };
 }
 // 복합 종목(여러 관절·큰 근육) = 긴 휴식, 고립 종목 = 짧은 휴식
-const COMPOUND = new Set(['벤치프레스', '인클라인 벤치프레스', '인클라인 덤벨 프레스', '덤벨 벤치프레스', '어시스트 딥스', '백스쿼트', '루마니안 데드리프트', '데드리프트', '불가리안 스플릿 스쿼트', '레그프레스', '시티드 레그프레스 (머신)', '런지', '워킹 런지', '바벨 로우', '원암 덤벨 로우', '시티드 케이블 로우', '랫풀다운', '어시스트 풀업', '풀업', '밀리터리 프레스', '스미스 숄더프레스', '덤벨 숄더프레스', '오버헤드프레스', '힙 쓰러스트', '스미스 스쿼트']);
+const COMPOUND = new Set(['벤치프레스', '인클라인 벤치프레스', '인클라인 덤벨 프레스', '덤벨 벤치프레스', '어시스트 딥스', '백스쿼트', '루마니안 데드리프트', '데드리프트', '불가리안 스플릿 스쿼트', '레그프레스', '시티드 레그프레스 (머신)', '런지', '맨몸 런지', '워킹 런지', '바벨 로우', '원암 덤벨 로우', '시티드 케이블 로우', '랫풀다운', '어시스트 풀업', '풀업', '밀리터리 프레스', '스미스 숄더프레스', '덤벨 숄더프레스', '오버헤드프레스', '힙 쓰러스트', '스미스 스쿼트']);
 function isCompound(name) { const i = exInfo(name); return COMPOUND.has(name) || i.type === 'barbell' || i.type === 'smith'; }
 function restOf(name) { const st = settings(); return isCompound(name) ? (+st.restBig || 150) : (+st.restSmall || 75); }
 const fmtRest = s => s >= 60 ? `${Math.floor(s / 60)}:${pad(s % 60)}` : `${s}초`;
@@ -905,7 +905,7 @@ function vSettings() {
   <div class="card col">
     <b>계정</b><span class="muted sm">${esc(S.user.email)}</span>
     <div class="row g6"><button class="btn" data-act="exportData">백업 복사(JSON)</button><button class="btn" data-act="logout">로그아웃</button></div>
-    <div class="muted sm">앱 버전 v47 (11/26 회사 하체 기구 · 런지)</div>
+    <div class="muted sm">앱 버전 v48 (11/26 맨몸 런지)</div>
   </div><div style="height:40px"></div></div>`;
 }
 
